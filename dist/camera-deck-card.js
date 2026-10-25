@@ -16,7 +16,7 @@ const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
 
 // Hides webrtc-camera's own header and mode label; the card draws its own overlays.
-export const PLAYER_STYLE = '.header,.mode{display:none} ha-card{background:none;border-radius:0;box-shadow:none} video{height:100%;object-fit:cover}';
+export const PLAYER_STYLE = '.header,.mode{display:none} ha-card{background:none;border-radius:0;box-shadow:none} video{height:100%;object-fit:cover;pointer-events:none}';
 
 export function normalizeConfig(config) {
   const cameras = config && config.cameras;
@@ -106,18 +106,19 @@ const CHEVRON = (dir, size) =>
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-const STYLE = `
+export const STYLE = `
 :host{display:block}
 .card{background:var(--ha-card-background,var(--card-background-color,#ffffff));color:var(--primary-text-color,#212121);border-radius:20px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:10px;font-family:inherit}
 button{font-family:inherit;cursor:pointer}
 .head{display:flex;align-items:center;gap:10px;padding:2px 4px 0}
 .head h2{margin:0;flex:1;font-size:16px;font-weight:500}
 .page-label{font-size:12px;color:var(--secondary-text-color,#6b6b6b)}
-.switch{display:flex;background:#f0f0f0;border-radius:12px;padding:3px;gap:3px}
-.switch button{width:40px;height:36px;border:0;border-radius:10px;display:flex;align-items:center;justify-content:center;background:transparent;color:#616161}
-.switch button[aria-checked="true"]{background:#ffffff;color:#212121;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.switch{display:flex;background:var(--secondary-background-color,#f0f0f0);border-radius:12px;padding:3px;gap:3px}
+.switch button{width:40px;height:36px;border:0;border-radius:10px;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--secondary-text-color,#616161)}
+.switch button[aria-checked="true"]{background:var(--card-background-color,#ffffff);color:var(--primary-text-color,#212121);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .view{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#2b3036}
 .slot{position:absolute;inset:0}
+.slot>webrtc-camera{display:block;width:100%;height:100%}
 .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:12px;color:rgba(255,255,255,.35)}
 .badges{position:absolute;left:12px;top:12px;display:flex;gap:8px;align-items:center}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
@@ -131,12 +132,12 @@ button{font-family:inherit;cursor:pointer}
 .vdots span.on{width:18px;background:#ffffff}
 .strip{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 4px}
 .thumb{flex:none;width:132px;border:0;padding:4px;border-radius:14px;display:flex;flex-direction:column;gap:6px;text-align:left;background:transparent;scroll-snap-align:start;color:var(--primary-text-color,#212121)}
-.thumb[aria-selected="true"]{background:#e3f2fd;outline:2px solid var(--primary-color,#0277bd)}
+.thumb[aria-selected="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 12%,transparent);outline:2px solid var(--primary-color,#0277bd)}
 .thumb .img{position:relative;display:block;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#2b3036}
 .thumb .img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .thumb .img .ph svg{width:20px;height:20px}
 .thumb.off .img{opacity:.45}
-.thumb .lbl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:#212121}
+.thumb .lbl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
 .dot{width:7px;height:7px;border-radius:50%;flex:none;background:#43a047}
 .off .dot,.dot.off{background:#9e9e9e}
 .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -147,10 +148,10 @@ button{font-family:inherit;cursor:pointer}
 .tile .badge{border-radius:8px;padding:3px 8px;font-size:10px}
 .tile .pill{border-radius:8px;padding:3px 8px;font-size:11px}
 .pager{display:flex;align-items:center;justify-content:center;gap:12px}
-.pager button{width:44px;height:44px;border-radius:50%;border:0;background:#f0f0f0;color:#212121;display:flex;align-items:center;justify-content:center}
+.pager button{width:44px;height:44px;border-radius:50%;border:0;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121);display:flex;align-items:center;justify-content:center}
 .pdots{display:flex;gap:6px}
-.pdots span{width:6px;height:6px;border-radius:3px;background:#c9c9c9}
-.pdots span.on{width:18px;background:#212121}
+.pdots span{width:6px;height:6px;border-radius:3px;background:var(--disabled-text-color,#c9c9c9)}
+.pdots span.on{width:18px;background:var(--primary-text-color,#212121)}
 .missing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;text-align:center;font-size:13px;color:#ffffff}
 `;
 
@@ -199,6 +200,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     document.addEventListener('visibilitychange', this._onVisibility);
     this._timer = setInterval(() => this._refreshThumbs(), THUMB_REFRESH_MS);
     this._refreshThumbs();
+    requestAnimationFrame(() => this._quietPlayers()); // players connect after the card
   }
 
   disconnectedCallback() {
@@ -246,8 +248,24 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     const key = JSON.stringify(vm) + this._missingPlayer;
     if (key === this._vmKey) return;
     this._vmKey = key;
+    const scroll = this.shadowRoot.querySelector('.strip')?.scrollLeft || 0;
+    const wasSingle = this._wasSingle;
+    this._wasSingle = vm.isSingle;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card">${this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
     this._mountPlayers(vm);
+    if (!vm.isSingle) return;
+    const strip = this.shadowRoot.querySelector('.strip');
+    strip.scrollLeft = scroll;
+    const sel = strip.querySelector('.thumb[aria-selected="true"]');
+    if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) {
+      strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+    }
+    for (const img of strip.querySelectorAll('img')) img.addEventListener('error', () => this._thumbFailed(img));
+    if (!wasSingle) this._refreshThumbs();
+  }
+
+  _thumbFailed(img) {
+    img.parentElement.innerHTML = `<span class="ph">${CAMERA_ICON(20, 1.5)}</span>`;
   }
 
   _head(vm) {
@@ -292,11 +310,10 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   async _mountPlayers(vm) {
     const slots = [...this.shadowRoot.querySelectorAll('.slot')];
     const wanted = new Set(slots.map((s) => s.dataset.stream));
+    // Detached players stop streaming after 5 s; they are kept and reused, because
+    // webrtc-camera never removes its document listeners and would leak if recreated.
     for (const [stream, el] of this._players) {
-      if (!wanted.has(stream)) {
-        el.remove();
-        this._players.delete(stream);
-      }
+      if (!wanted.has(stream)) el.remove();
     }
     if (!slots.length) return;
     if (!customElements.get('webrtc-camera')) {
@@ -323,6 +340,12 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       }
       slot.appendChild(el); // moving an existing player keeps its stream (webrtc-camera waits 5 s before closing)
     }
+    this._quietPlayers();
+  }
+
+  // video-rtc turns native controls on (on connect) unless its own UI is on.
+  _quietPlayers() {
+    for (const el of this._players.values()) if (el.video) el.video.controls = false;
   }
 
   async _refreshThumbs() {
@@ -343,7 +366,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       if (!img) {
         box.innerHTML = '<img alt="">';
         img = box.querySelector('img');
-        img.addEventListener('error', () => { box.innerHTML = `<span class="ph">${CAMERA_ICON(20, 1.5)}</span>`; });
+        img.addEventListener('error', () => this._thumbFailed(img));
       }
       img.src = src;
     }

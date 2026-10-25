@@ -55,4 +55,4 @@ The card is in Czech; there is no visual editor yet.
 
 ## Development
 
-`demo.html` renders the card with a stub player and a fake `hass` (serve the folder, e.g. `python3 -m http.server`, and open `demo.html?layout=1|2|4`). Unit tests: `node --test tests/*.test.mjs`.
+`demo.html` renders the card with a stub player and a fake `hass` (serve the folder, e.g. `python3 -m http.server`, and open `demo.html?layout=1|2|4`). Unit tests: `node --test tests/*.test.mjs`. Browser checks (player lifecycle, strip, thumbnails): open `tests/dom.html` from the served folder, it prints `RESULT PASS`.

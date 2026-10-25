@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>camera-deck-card DOM checks</title></head>
+<body>
+<!--
+  Browser-only checks (player lifecycle, strip scroll, thumbnails). Run:
+  python3 -m http.server 8765 &
+  "Google Chrome" --headless=new --virtual-time-budget=5000 --dump-dom http://localhost:8765/tests/dom.html | grep RESULT
+-->
+<pre id="out"></pre>
+<script type="module">
+  let created = 0;
+  customElements.define('webrtc-camera', class extends HTMLElement {
+    setConfig(c) { this.config = c; }
+    set hass(h) {}
+    connectedCallback() {
+      // like video-rtc's oninit: native controls on
+      if (!this.video) { created++; this.video = document.createElement('video'); this.video.controls = true; this.appendChild(this.video); }
+    }
+  });
+  await import('../dist/camera-deck-card.js');
+
+  let ws = 0;
+  const states = { 'input_select.l': { state: '1' } };
+  const hass = {
+    states,
+    callService: async (d, s, data) => { states[data.entity_id] = { state: data.option }; },
+    callWS: async (msg) => { ws++; return { path: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' }; },
+    hassUrl: (p) => p,
+  };
+  const cameras = Array.from({ length: 6 }, (_, i) => ({ stream: 's' + i, name: 'Camera ' + i }));
+  const box = document.createElement('div');
+  box.style.width = '398px';
+  document.body.appendChild(box);
+  const card = document.createElement('camera-deck-card');
+  card.setConfig({ layout_entity: 'input_select.l', cameras });
+  card.hass = hass;
+  box.appendChild(card);
+  const root = card.shadowRoot;
+  const tick = (ms = 50) => new Promise((r) => setTimeout(r, ms));
+  const click = (sel) => root.querySelector(sel).click();
+  const results = {};
+  await tick();
+
+  // I1: native controls off on the mounted player
+  results.controlsOff = root.querySelector('.slot webrtc-camera').video.controls === false;
+
+  // I5: switching back and forth reuses the players
+  click('.nav.next'); await tick(); click('.nav.prev'); await tick(); click('.nav.next'); await tick();
+  results.playersReused = created === 2;
+
+  // I2: the selected thumbnail stays in view after a camera switch
+  click('.thumb[data-val="4"]'); await tick();
+  const strip = root.querySelector('.strip');
+  const sel = root.querySelector('.thumb[aria-selected="true"]');
+  results.selectedInView = sel.offsetLeft + sel.offsetWidth <= strip.scrollLeft + strip.clientWidth + 1 && strip.scrollLeft > 0;
+
+  // I3: switching grid -> single loads thumbnails right away
+  states['input_select.l'] = { state: '4' }; card.hass = { ...hass, states: { ...states } }; await tick();
+  ws = 0;
+  states['input_select.l'] = { state: '1' }; card.hass = { ...hass, states: { ...states } }; await tick(200);
+  results.thumbsOnSingle = ws > 0 && root.querySelectorAll('.thumb img').length === 6;
+
+  const ok = Object.values(results).every(Boolean);
+  document.getElementById('out').textContent = 'RESULT ' + (ok ? 'PASS ' : 'FAIL ') + JSON.stringify(results);
+</script>
+</body>
+</html>

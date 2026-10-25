@@ -1,7 +1,7 @@
 // Run: node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel } from '../dist/camera-deck-card.js';
+import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, PLAYER_STYLE, STYLE } from '../dist/camera-deck-card.js';
 
 const hass = (states) => ({ states: Object.fromEntries(Object.entries(states).map(([k, v]) => [k, { state: v }])) });
 const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) => ({ stream: `s${i}`, name: `Cam ${i}` })) });
@@ -72,4 +72,24 @@ test('viewModel forceSingle overrides the shared layout entity', () => {
   const h = hass({ 'input_select.l': '4' });
   assert.equal(viewModel(c, h, { layout: '1', cam: 0, page: 0 }).isSingle, false);
   assert.equal(viewModel(c, h, { layout: '1', cam: 1, page: 0, forceSingle: true }).cam.stream, 'b');
+});
+
+test('player video ignores taps (no native controls over the overlays)', () => {
+  assert.match(PLAYER_STYLE, /video\{[^}]*pointer-events:none/);
+});
+
+test('card colours follow the theme: hex colours only as var() fallbacks, except badges/overlays', () => {
+  const fixed = ['#d32f2f', '#616161', '#ffffff', '#43a047', '#9e9e9e', '#2b3036', '#212121'];
+  const allowedIn = (sel) => /badge|nav|vdots|pos|pill|ph|missing|\.view|\.tile|\.img|\.dot|\.off/.test(sel);
+  const rules = STYLE.replace(/var\([^()]*(\([^()]*\)[^()]*)*\)/g, '').split('}');
+  for (const r of rules) {
+    const [sel, body = ''] = r.split('{');
+    for (const hex of body.match(/#[0-9a-f]{3,6}\b/gi) || []) {
+      assert.ok(allowedIn(sel) && fixed.includes(hex.toLowerCase()), `bare ${hex} in "${sel.trim()}"`);
+    }
+  }
+});
+
+test('player host fills its slot', () => {
+  assert.match(STYLE, /\.slot>webrtc-camera\{display:block;width:100%;height:100%\}/);
 });
