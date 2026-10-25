@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera Deck Card demo</title>
+<style>
+  body { margin: 0; padding: 24px; background: #efefef; font-family: Roboto, system-ui, sans-serif; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .wide { width: 640px; } .phone { width: 398px; }
+  h3 { margin: 0; font-size: 13px; color: #6b6b6b; font-weight: 500; }
+</style>
+</head>
+<body>
+<script type="module">
+  // Stub player: a dark frame that shows which go2rtc stream it would play.
+  customElements.define('webrtc-camera', class extends HTMLElement {
+    setConfig(c) { this.config = c; }
+    set hass(h) {}
+    connectedCallback() {
+      this.style.cssText = 'display:block;width:100%;height:100%';
+      this.innerHTML = `<div style="width:100%;height:100%;background:linear-gradient(135deg,#3a4250,#20242a);color:rgba(255,255,255,.55);display:flex;align-items:flex-end;justify-content:flex-end;padding:8px;box-sizing:border-box;font-size:11px">${this.config.url}</div>`;
+    }
+  });
+
+  const { CameraDeckCard } = await import('./dist/camera-deck-card.js');
+
+  const thumb = (stream) => 'data:image/svg+xml,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" fill="#3a4250"/><text x="8" y="82" fill="#9aa" font-size="10" font-family="sans-serif">${stream}</text></svg>`);
+
+  const states = {
+    'input_select.hfb_cameras_layout': { state: '1' },
+    'camera.hlavni_vchod': { state: 'unavailable' },
+  };
+  const cards = [];
+  const hass = {
+    states,
+    callService(domain, service, data) {
+      states[data.entity_id] = { state: data.option };
+      cards.forEach((c) => { c.hass = { ...hass, states: { ...states } }; });
+    },
+    callWS: async (msg) => ({ path: thumb(decodeURIComponent(msg.path.split('poster=')[1])) }),
+    hassUrl: (p) => p,
+  };
+  const cameras = [
+    { stream: 'cam_entry', name: 'Vchod' },
+    { stream: 'cam_kidsroom', name: 'Dětský pokoj' },
+    { stream: 'cam_bedroom', name: 'Beatka ložnice' },
+    { stream: 'tapo_babi', name: 'Bábi' },
+    { stream: 'hlavni_vchod', name: 'Hlavní vchod', entity: 'camera.hlavni_vchod' },
+  ];
+  const layout = new URLSearchParams(location.search).get('layout') || '1';
+  states['input_select.hfb_cameras_layout'] = { state: layout };
+
+  for (const [cls, label] of [['wide', 'Tablet / desktop (640 px)'], ['phone', 'Mobil (398 px)']]) {
+    const col = document.createElement('div');
+    col.className = 'col ' + cls;
+    col.innerHTML = `<h3>${label}</h3>`;
+    const card = document.createElement('camera-deck-card');
+    card.setConfig({ layout_entity: 'input_select.hfb_cameras_layout', cameras });
+    card.hass = hass;
+    col.appendChild(card);
+    document.body.appendChild(col);
+    cards.push(card);
+  }
+</script>
+</body>
+</html>
