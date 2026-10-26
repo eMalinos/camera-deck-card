@@ -30,7 +30,7 @@
 
   const states = {
     'input_select.hfb_cameras_layout': { state: '1' },
-    'camera.hlavni_vchod': { state: 'unavailable' },
+    'camera.garden': { state: 'unavailable' },
   };
   const cards = [];
   const hass = {
@@ -43,11 +43,11 @@
     hassUrl: (p) => p,
   };
   const cameras = [
-    { stream: 'cam_entry', name: 'Vchod' },
-    { stream: 'cam_kidsroom', name: 'Dětský pokoj' },
-    { stream: 'cam_bedroom', name: 'Beatka ložnice' },
-    { stream: 'tapo_babi', name: 'Bábi' },
-    { stream: 'hlavni_vchod', name: 'Hlavní vchod', entity: 'camera.hlavni_vchod' },
+    { stream: 'cam_front_door', name: 'Front door' },
+    { stream: 'cam_kids_room', name: 'Kids room' },
+    { stream: 'cam_bedroom', name: 'Bedroom' },
+    { stream: 'cam_living_room', name: 'Living room' },
+    { stream: 'cam_garden', name: 'Garden', entity: 'camera.garden' },
   ];
   const layout = new URLSearchParams(location.search).get('layout') || '1';
   states['input_select.hfb_cameras_layout'] = { state: layout };
@@ -57,7 +57,7 @@
     col.className = 'col ' + cls;
     col.innerHTML = `<h3>${label}</h3>`;
     const card = document.createElement('camera-deck-card');
-    card.setConfig({ layout_entity: 'input_select.hfb_cameras_layout', cameras });
+    card.setConfig({ title: 'Cameras', layout_entity: 'input_select.hfb_cameras_layout', cameras });
     card.hass = hass;
     col.appendChild(card);
     document.body.appendChild(col);

@@ -32,14 +32,14 @@ HACS → ⋮ → Custom repositories → `https://github.com/eMalinos/camera-dec
 
 ```yaml
 type: custom:camera-deck-card
-title: Kamery
+title: Cameras
 layout_entity: input_select.hfb_cameras_layout
 cameras:
-  - stream: cam_entry
-    name: Vchod
-    entity: camera.cam_entry
+  - stream: cam_front_door
+    name: Front door
+    entity: camera.front_door
   - stream: cam_bedroom
-    name: Beatka ložnice
+    name: Bedroom
 ```
 
 | Option | Required | Description |
