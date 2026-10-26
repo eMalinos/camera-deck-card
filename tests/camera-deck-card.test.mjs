@@ -8,7 +8,7 @@ const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) =
 
 test('normalizeConfig fills defaults and rejects missing cameras/stream', () => {
   assert.deepEqual(normalizeConfig({ cameras: [{ stream: 'cam_entry' }] }),
-    { title: 'Kamery', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null }] });
+    { title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null }] });
   assert.throws(() => normalizeConfig({}), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [] }), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [{ name: 'x' }] }), /cameras\[0\]\.stream is required/);
@@ -60,7 +60,7 @@ test('viewModel single layout', () => {
 test('viewModel grid pages are clamped and use 2 columns semantics', () => {
   const vm = viewModel(cfg(5), hass({}), { layout: '4', cam: 0, page: 2 });
   assert.equal(vm.isSingle, false);
-  assert.equal(vm.pager.label, 'Strana 2 / 2');
+  assert.equal(vm.pager.label, 'Page 2 / 2');
   assert.deepEqual(vm.grid.map((g) => g.index), [4]);
   assert.deepEqual(vm.pager.dots, [false, true]);
   const two = viewModel(cfg(5), hass({}), { layout: '2', cam: 0, page: 0 });

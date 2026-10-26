@@ -48,10 +48,10 @@ cameras:
 | `cameras[].stream` | yes | go2rtc stream name. |
 | `cameras[].name` | no | Name shown on the camera (default: the stream name). |
 | `cameras[].entity` | no | A `camera.*` entity for the OFFLINE status. |
-| `title` | no | Heading (default `Kamery`). |
+| `title` | no | Heading (default `Cameras`). |
 | `layout_entity` | no | `input_select` with options `1`, `2`, `4`. Without it the layout is per device. |
 
-The card is in Czech; there is no visual editor yet.
+There is no visual editor yet.
 
 ## Development
 

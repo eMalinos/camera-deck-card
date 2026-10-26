@@ -24,7 +24,7 @@ export function normalizeConfig(config) {
     throw new Error('camera-deck-card: cameras is required');
   }
   return {
-    title: config.title ?? 'Kamery',
+    title: config.title ?? 'Cameras',
     layout_entity: config.layout_entity || null,
     cameras: cameras.map((c, i) => {
       if (!c || !c.stream) throw new Error(`camera-deck-card: cameras[${i}].stream is required`);
@@ -78,7 +78,7 @@ export function viewModel(cfg, hass, state) {
     layout,
     isSingle,
     pager: {
-      label: isSingle ? '' : `Strana ${pg.page + 1} / ${pg.pages}`,
+      label: isSingle ? '' : `Page ${pg.page + 1} / ${pg.pages}`,
       pages: pg.pages,
       page: pg.page,
       dots: Array.from({ length: pg.pages }, (_, k) => k === pg.page),
@@ -91,14 +91,14 @@ export function viewModel(cfg, hass, state) {
 
 const THUMB_REFRESH_MS = 10000;
 const PLAYER_WAIT_MS = 10000;
-const MISSING_PLAYER = 'Chybí integrace WebRTC Camera (HACS)';
+const MISSING_PLAYER = 'WebRTC Camera integration (HACS) is missing';
 
 const ICON_PATHS = {
   '1': '<rect x="3" y="5" width="18" height="14" rx="2"></rect>',
   '2': '<rect x="2" y="7" width="9" height="10" rx="1.5"></rect><rect x="13" y="7" width="9" height="10" rx="1.5"></rect>',
   '4': '<rect x="3" y="4" width="8" height="7" rx="1.5"></rect><rect x="13" y="4" width="8" height="7" rx="1.5"></rect><rect x="3" y="13" width="8" height="7" rx="1.5"></rect><rect x="13" y="13" width="8" height="7" rx="1.5"></rect>',
 };
-const LAYOUT_LABELS = { '1': '1 kamera', '2': '2 kamery', '4': '4 kamery' };
+const LAYOUT_LABELS = { '1': '1 camera', '2': '2 cameras', '4': '4 cameras' };
 const CAMERA_ICON = (size, width) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${width}" aria-hidden="true"><path d="M3 7h12v10H3zM15 10l6-3v10l-6-3"></path></svg>`;
 const CHEVRON = (dir, size) =>
@@ -271,15 +271,15 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _head(vm) {
     const btns = ['1', '2', '4'].map((id) =>
       `<button role="radio" aria-checked="${vm.layout === id}" aria-label="${LAYOUT_LABELS[id]}" data-act="layout" data-val="${id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${ICON_PATHS[id]}</svg></button>`).join('');
-    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span><div class="switch" role="radiogroup" aria-label="Rozvržení kamer">${btns}</div></div>`;
+    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span><div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div></div>`;
   }
 
   _badges(c) {
-    return `<span class="badges"><span class="badge${c.online ? '' : ' off'}">${c.online ? '● ŽIVĚ' : 'OFFLINE'}</span><span class="pill">${esc(c.name)}</span></span>`;
+    return `<span class="badges"><span class="badge${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span><span class="pill">${esc(c.name)}</span></span>`;
   }
 
   _video(c, iconSize) {
-    if (!c.online) return `<span class="ph">${CAMERA_ICON(iconSize, 1.5)}<span>Kamera nedostupná</span></span>`;
+    if (!c.online) return `<span class="ph">${CAMERA_ICON(iconSize, 1.5)}<span>Camera unavailable</span></span>`;
     if (this._missingPlayer) return `<span class="missing">${MISSING_PLAYER}</span>`;
     return `<span class="ph">${CAMERA_ICON(iconSize, 1.5)}</span><div class="slot" data-stream="${esc(c.stream)}"></div>`;
   }
@@ -288,7 +288,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     const c = vm.cam;
     const n = vm.cams.length;
     const nav = n > 1
-      ? `<button class="nav prev" aria-label="Předchozí kamera" data-act="cam" data-val="-1">${CHEVRON('prev', 20)}</button><button class="nav next" aria-label="Další kamera" data-act="cam" data-val="1">${CHEVRON('next', 20)}</button>`
+      ? `<button class="nav prev" aria-label="Previous camera" data-act="cam" data-val="-1">${CHEVRON('prev', 20)}</button><button class="nav next" aria-label="Next camera" data-act="cam" data-val="1">${CHEVRON('next', 20)}</button>`
       : '';
     const dots = vm.cams.map((x) => `<span class="${x.selected ? 'on' : ''}"></span>`).join('');
     const thumbs = vm.cams.map((x) => {
@@ -297,14 +297,14 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
     return `<div class="view">${this._video(c, 44)}${this._badges(c)}<span class="pos">${c.pos}</span>${nav}<div class="vdots">${dots}</div></div>`
-      + `<div class="strip" role="tablist" aria-label="Kamery">${thumbs}</div>`;
+      + `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`;
   }
 
   _grid(vm) {
     const tiles = vm.grid.map((c) =>
-      `<button class="tile${c.online ? '' : ' off'}" aria-label="Otevřít ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._badges(c)}</button>`).join('');
+      `<button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._badges(c)}</button>`).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
-    return `<div class="grid">${tiles}</div><div class="pager"><button aria-label="Předchozí strana" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Další strana" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
+    return `<div class="grid">${tiles}</div><div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
   }
 
   async _mountPlayers(vm) {

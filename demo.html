@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -52,12 +52,12 @@
   const layout = new URLSearchParams(location.search).get('layout') || '1';
   states['input_select.hfb_cameras_layout'] = { state: layout };
 
-  for (const [cls, label] of [['wide', 'Tablet / desktop (640 px)'], ['phone', 'Mobil (398 px)']]) {
+  for (const [cls, label] of [['wide', 'Tablet / desktop (640 px)'], ['phone', 'Phone (398 px)']]) {
     const col = document.createElement('div');
     col.className = 'col ' + cls;
     col.innerHTML = `<h3>${label}</h3>`;
     const card = document.createElement('camera-deck-card');
-    card.setConfig({ title: 'Cameras', layout_entity: 'input_select.hfb_cameras_layout', cameras });
+    card.setConfig({ layout_entity: 'input_select.hfb_cameras_layout', cameras });
     card.hass = hass;
     col.appendChild(card);
     document.body.appendChild(col);
