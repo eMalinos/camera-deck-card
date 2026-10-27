@@ -20,7 +20,7 @@ const PTZ_DIRS = ['left', 'up', 'down', 'right'];
 // Card badges sit bottom left: cameras usually stamp the time top left.
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), as a small pill bottom right;
 // the card draws its own overlays. `contain` keeps the camera's own overlays (time) in view.
-export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:auto;right:10px} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} video{height:100%;object-fit:contain;pointer-events:none}';
+export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:auto;right:10px} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} .player{background:none} video{height:100%;object-fit:contain;pointer-events:none}';
 
 export function normalizeConfig(config) {
   const cameras = config && config.cameras;
@@ -88,9 +88,10 @@ export function viewModel(cfg, hass, state) {
   const n = cfg.cameras.length;
   const ci = wrap(state.cam || 0, n);
   const cams = cfg.cameras.map((c, i) => ({
-    index: i, stream: c.stream, name: c.name, online: isOnline(hass, c.entity), selected: i === ci,
+    index: i, stream: c.stream, name: c.name, online: isOnline(hass, c.entity), selected: i === ci, sound: !!state.sound?.[c.stream],
   }));
   const pg = pageOf(n, isSingle ? 1 : Number(layout), state.page);
+  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => c);
   return {
     title: cfg.title,
     layout,
@@ -103,10 +104,12 @@ export function viewModel(cfg, hass, state) {
     },
     cam: {
       index: ci, stream: cams[ci].stream, name: cams[ci].name, online: cams[ci].online, pos: `${ci + 1} / ${n}`,
-      sound: !!state.sound?.[cams[ci].stream], ...(isSingle ? controlsOf(hass, cfg.cameras[ci]) : { ptz: [], privacy: null }),
+      sound: cams[ci].sound, ...(isSingle ? controlsOf(hass, cfg.cameras[ci]) : { ptz: [], privacy: null }),
     },
     cams,
-    grid: isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => c),
+    grid,
+    // Grid sound button: on when every camera on the page has sound.
+    gridSound: grid.length > 0 && grid.every((c) => c.sound),
   };
 }
 
@@ -147,6 +150,7 @@ button{font-family:inherit;cursor:pointer}
 .view{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#2b3036}
 .slot{position:absolute;inset:0}
 .slot>webrtc-camera{display:block;width:100%;height:100%}
+.out{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000000}
 .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:12px;color:rgba(255,255,255,.35)}
 .badges{position:absolute;left:12px;bottom:12px;display:flex;gap:8px;align-items:center}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
@@ -172,7 +176,11 @@ button{font-family:inherit;cursor:pointer}
 .tile .badges{left:8px;bottom:8px;gap:6px}
 .tile .badge{border-radius:8px;padding:3px 8px;font-size:10px}
 .tile .pill{border-radius:8px;padding:3px 8px;font-size:11px}
-.pager{display:flex;align-items:center;justify-content:center;gap:12px}
+.pager{position:relative;display:flex;align-items:center;justify-content:center;gap:12px}
+.pager .snd{position:absolute;left:0}
+.pager .snd[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
+.pill.snd{position:absolute;right:8px;top:8px;display:flex;padding:3px 6px}
+.pill.snd svg{width:14px;height:14px}
 .pager button{width:44px;height:44px;border-radius:50%;border:0;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121);display:flex;align-items:center;justify-content:center}
 .pdots{display:flex;gap:6px}
 .pdots span{width:6px;height:6px;border-radius:3px;background:var(--disabled-text-color,#c9c9c9)}
@@ -256,9 +264,11 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         this._set({ layout: v, page: 0, forceSingle: false });
         break;
       case 'cam':
+        this._slide = Number(v);
         this._set({ cam: wrap(vm.cam.index + Number(v), n) });
         break;
       case 'pick':
+        this._slide = Math.sign(Number(v) - vm.cam.index);
         this._set({ cam: Number(v) });
         break;
       case 'page':
@@ -269,6 +279,9 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         break;
       case 'sound':
         this._set({ sound: { ...this._state.sound, [vm.cam.stream]: !vm.cam.sound } });
+        break;
+      case 'grid-sound':
+        this._set({ sound: { ...this._state.sound, ...Object.fromEntries(vm.grid.map((c) => [c.stream, !vm.gridSound])) } });
         break;
       case 'press':
         this._hass.callService('button', 'press', { entity_id: v });
@@ -282,16 +295,21 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _render() {
     if (!this._cfg || !this._hass) return;
     const vm = viewModel(this._cfg, this._hass, this._state);
+    const prev = this._vm;
     this._vm = vm;
     const key = JSON.stringify(vm) + this._missingPlayer;
     if (key === this._vmKey) return;
     this._vmKey = key;
+    const slide = vm.isSingle && prev?.isSingle && prev.cam.stream !== vm.cam.stream ? this._slide : 0;
+    this._slide = 0;
+    const out = slide ? this._snapshot(prev.cam.stream) : null;
     const scroll = this.shadowRoot.querySelector('.strip')?.scrollLeft || 0;
     const wasSingle = this._wasSingle;
     this._wasSingle = vm.isSingle;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card">${this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
     this._mountPlayers(vm);
     if (!vm.isSingle) return;
+    if (slide) this._slideIn(out, slide);
     const strip = this.shadowRoot.querySelector('.strip');
     strip.scrollLeft = scroll;
     const sel = strip.querySelector('.thumb[aria-selected="true"]');
@@ -300,6 +318,29 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     }
     for (const img of strip.querySelectorAll('img')) img.addEventListener('error', () => this._thumbFailed(img));
     if (!wasSingle) this._refreshThumbs();
+  }
+
+  // The last frame of the outgoing camera: its player leaves the DOM on the camera switch.
+  _snapshot(stream) {
+    const v = this._players.get(stream)?.video;
+    if (!v?.videoWidth) return null;
+    const c = document.createElement('canvas');
+    c.className = 'out';
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    try { c.getContext('2d').drawImage(v, 0, 0); } catch { return null; }
+    return c;
+  }
+
+  // Camera switch: the old picture slides out, the new one slides in (dir 1 = from the right).
+  _slideIn(out, dir) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const view = this.shadowRoot.querySelector('.view');
+    const opts = { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' };
+    for (const el of view.querySelectorAll('.slot,.ph')) el.animate([{ transform: `translateX(${dir * 100}%)` }, { transform: 'none' }], opts);
+    if (!out) return;
+    view.prepend(out);
+    out.animate([{ transform: 'none' }, { transform: `translateX(${-dir * 100}%)` }], opts).onfinish = () => out.remove();
   }
 
   _thumbFailed(img) {
@@ -319,7 +360,10 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _video(c, iconSize) {
     if (!c.online) return `<span class="ph">${CAMERA_ICON(iconSize, 1.5)}<span>Camera unavailable</span></span>`;
     if (this._missingPlayer) return `<span class="missing">${MISSING_PLAYER}</span>`;
-    return `<span class="ph">${CAMERA_ICON(iconSize, 1.5)}</span><div class="slot" data-stream="${esc(c.stream)}"></div>`;
+    // The last thumbnail shows until the player has video.
+    const thumb = this._thumbs.get(c.stream);
+    const bg = thumb ? ` style="background:#000000 url(&quot;${esc(thumb)}&quot;) center/contain no-repeat"` : '';
+    return `<span class="ph">${CAMERA_ICON(iconSize, 1.5)}</span><div class="slot" data-stream="${esc(c.stream)}"${bg}></div>`;
   }
 
   _single(vm) {
@@ -350,9 +394,10 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
 
   _grid(vm) {
     const tiles = vm.grid.map((c) =>
-      `<button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._badges(c)}</button>`).join('');
+      `<button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._badges(c)}${c.online && c.sound ? `<span class="pill snd" aria-label="Sound on">${TOOL_ICON(SOUND_ON)}</span>` : ''}</button>`).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
-    return `<div class="grid">${tiles}</div><div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
+    const sound = `<button class="snd" aria-pressed="${vm.gridSound}" aria-label="${vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${TOOL_ICON(vm.gridSound ? SOUND_ON : SOUND_OFF)}</button>`;
+    return `<div class="grid">${tiles}</div><div class="pager">${sound}<button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
   }
 
   async _mountPlayers(vm) {
@@ -387,8 +432,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         this._players.set(stream, el);
       }
       slot.appendChild(el); // moving an existing player keeps its stream (webrtc-camera waits 5 s before closing)
-      // Sound only on the single camera; grid tiles always stay muted.
-      if (el.video) el.video.muted = !(vm.isSingle && vm.cam.sound);
+      if (el.video) el.video.muted = !this._state.sound[stream];
     }
     this._quietPlayers();
   }

@@ -77,6 +77,13 @@ test('viewModel sound is per stream and controls only in the single layout', () 
   assert.deepEqual(viewModel(c, hass({}), { layout: '2', cam: 0, page: 0 }).cam.ptz, []);
 });
 
+test('viewModel gridSound is on only when every camera on the page has sound', () => {
+  const c = cfg(3);
+  assert.equal(viewModel(c, hass({}), { layout: '2', cam: 0, page: 0, sound: { s0: true, s1: true } }).gridSound, true);
+  assert.equal(viewModel(c, hass({}), { layout: '2', cam: 0, page: 0, sound: { s0: true } }).gridSound, false);
+  assert.deepEqual(viewModel(c, hass({}), { layout: '2', cam: 0, page: 1, sound: { s0: true, s1: true } }).grid.map((g) => g.sound), [false]);
+});
+
 test('viewModel single layout', () => {
   const vm = viewModel(cfg(5), hass({}), { layout: '1', cam: -1, page: 0 });
   assert.equal(vm.isSingle, true);
@@ -108,8 +115,8 @@ test('player video ignores taps (no native controls over the overlays)', () => {
 });
 
 test('card colours follow the theme: hex colours only as var() fallbacks, except badges/overlays', () => {
-  const fixed = ['#d32f2f', '#616161', '#ffffff', '#43a047', '#9e9e9e', '#2b3036', '#212121'];
-  const allowedIn = (sel) => /badge|nav|pos|pill|ph|missing|\.view|\.tile|\.img|\.dot|\.off/.test(sel);
+  const fixed = ['#000000', '#d32f2f', '#616161', '#ffffff', '#43a047', '#9e9e9e', '#2b3036', '#212121'];
+  const allowedIn = (sel) => /badge|nav|pos|pill|ph|missing|\.view|\.tile|\.img|\.dot|\.off|\.out/.test(sel);
   const rules = STYLE.replace(/var\([^()]*(\([^()]*\)[^()]*)*\)/g, '').split('}');
   for (const r of rules) {
     const [sel, body = ''] = r.split('{');

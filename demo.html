@@ -70,6 +70,7 @@
     card.hass = hass;
     col.appendChild(card);
     if (params.has('cam')) card._set({ cam: Number(params.get('cam')) });
+    if (params.has('sound')) card._set({ sound: Object.fromEntries(cameras.map((c) => [c.stream, true])) });
     document.body.appendChild(col);
     cards.push(card);
   }
