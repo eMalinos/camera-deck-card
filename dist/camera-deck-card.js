@@ -17,6 +17,7 @@ const OFFLINE_STATES = ['unavailable', 'unknown'];
 
 const PTZ_DIRS = ['left', 'up', 'down', 'right'];
 
+// Card badges sit bottom left: cameras usually stamp the time top left.
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), as a small pill bottom right;
 // the card draws its own overlays. `contain` keeps the camera's own overlays (time) in view.
 export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:auto;right:10px} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} video{height:100%;object-fit:contain;pointer-events:none}';
@@ -147,16 +148,13 @@ button{font-family:inherit;cursor:pointer}
 .slot{position:absolute;inset:0}
 .slot>webrtc-camera{display:block;width:100%;height:100%}
 .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:12px;color:rgba(255,255,255,.35)}
-.badges{position:absolute;left:12px;top:12px;display:flex;gap:8px;align-items:center}
+.badges{position:absolute;left:12px;bottom:12px;display:flex;gap:8px;align-items:center}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
 .badge.off{background:#616161}
 .pill{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px;font-weight:500}
 .pos{position:absolute;right:12px;top:12px;background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px}
 .nav{position:absolute;top:50%;margin-top:-22px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.85);color:#212121;display:flex;align-items:center;justify-content:center}
 .nav.prev{left:10px}.nav.next{right:10px}
-.vdots{position:absolute;left:0;right:0;bottom:12px;display:flex;justify-content:center;gap:6px}
-.vdots span{width:6px;height:6px;border-radius:3px;background:rgba(255,255,255,.5)}
-.vdots span.on{width:18px;background:#ffffff}
 .strip{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 4px}
 .thumb{flex:none;width:132px;border:0;padding:4px;border-radius:14px;display:flex;flex-direction:column;gap:6px;text-align:left;background:transparent;scroll-snap-align:start;color:var(--primary-text-color,#212121)}
 .thumb[aria-selected="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 12%,transparent);outline:2px solid var(--primary-color,#0277bd)}
@@ -171,7 +169,7 @@ button{font-family:inherit;cursor:pointer}
 .tile{position:relative;border:0;padding:0;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#2b3036}
 .tile.off{opacity:.6}
 .tile .slot{pointer-events:none}
-.tile .badges{left:8px;top:8px;gap:6px}
+.tile .badges{left:8px;bottom:8px;gap:6px}
 .tile .badge{border-radius:8px;padding:3px 8px;font-size:10px}
 .tile .pill{border-radius:8px;padding:3px 8px;font-size:11px}
 .pager{display:flex;align-items:center;justify-content:center;gap:12px}
@@ -330,13 +328,12 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     const nav = n > 1
       ? `<button class="nav prev" aria-label="Previous camera" data-act="cam" data-val="-1">${CHEVRON('prev', 20)}</button><button class="nav next" aria-label="Next camera" data-act="cam" data-val="1">${CHEVRON('next', 20)}</button>`
       : '';
-    const dots = vm.cams.map((x) => `<span class="${x.selected ? 'on' : ''}"></span>`).join('');
     const thumbs = vm.cams.map((x) => {
       const src = x.online && this._thumbs.get(x.stream);
       const img = src ? `<img alt="" src="${esc(src)}">` : `<span class="ph">${CAMERA_ICON(20, 1.5)}</span>`;
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
-    return `<div class="view">${this._video(c, 44)}${this._badges(c)}<span class="pos">${c.pos}</span>${nav}<div class="vdots">${dots}</div></div>`
+    return `<div class="view">${this._video(c, 44)}${this._badges(c)}<span class="pos">${c.pos}</span>${nav}</div>`
       + this._tools(c)
       + `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`;
   }
