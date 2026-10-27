@@ -45,6 +45,11 @@
   // I1: native controls off on the mounted player
   results.controlsOff = root.querySelector('.slot webrtc-camera').video.controls === false;
 
+  // Next camera slides in (no snapshot here: the stub video has no frames)
+  click('.nav.next'); await tick(0);
+  results.slides = root.querySelector('.view .slot').getAnimations().length > 0;
+  click('.nav.prev'); await tick();
+
   // I5: switching back and forth reuses the players
   click('.nav.next'); await tick(); click('.nav.prev'); await tick(); click('.nav.next'); await tick();
   results.playersReused = created === 2;
@@ -61,12 +66,17 @@
   states['input_select.l'] = { state: '1' }; card.hass = { ...hass, states: { ...states } }; await tick(200);
   results.thumbsOnSingle = ws > 0 && root.querySelectorAll('.thumb img').length === 6;
 
-  // Sound: the toolbar toggle unmutes the single player and the grid mutes it again
+  // Sound: the toolbar toggle unmutes the single player; other cameras stay muted in the grid
   click('.tools button[data-act="sound"]'); await tick();
   const single = root.querySelector('.slot webrtc-camera');
   results.soundOn = single.video.muted === false && root.querySelector('.tools button[data-act="sound"]').getAttribute('aria-pressed') === 'true';
   states['input_select.l'] = { state: '2' }; card.hass = { ...hass, states: { ...states } }; await tick();
   results.gridMuted = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => p.video.muted);
+  // The grid button unmutes every camera on the page, then mutes them again
+  click('.pager .snd'); await tick();
+  results.gridSoundOn = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => !p.video.muted) && root.querySelectorAll('.pill.snd').length === 2;
+  click('.pager .snd'); await tick();
+  results.gridSoundOff = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => p.video.muted);
 
   const ok = Object.values(results).every(Boolean);
   document.getElementById('out').textContent = 'RESULT ' + (ok ? 'PASS ' : 'FAIL ') + JSON.stringify(results);
