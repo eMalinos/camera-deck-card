@@ -109,7 +109,7 @@ test('player video ignores taps (no native controls over the overlays)', () => {
 
 test('card colours follow the theme: hex colours only as var() fallbacks, except badges/overlays', () => {
   const fixed = ['#d32f2f', '#616161', '#ffffff', '#43a047', '#9e9e9e', '#2b3036', '#212121'];
-  const allowedIn = (sel) => /badge|nav|vdots|pos|pill|ph|missing|\.view|\.tile|\.img|\.dot|\.off/.test(sel);
+  const allowedIn = (sel) => /badge|nav|pos|pill|ph|missing|\.view|\.tile|\.img|\.dot|\.off/.test(sel);
   const rules = STYLE.replace(/var\([^()]*(\([^()]*\)[^()]*)*\)/g, '').split('}');
   for (const r of rules) {
     const [sel, body = ''] = r.split('{');
@@ -117,6 +117,11 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
       assert.ok(allowedIn(sel) && fixed.includes(hex.toLowerCase()), `bare ${hex} in "${sel.trim()}"`);
     }
   }
+});
+
+test('card badges stay off the top left corner, where cameras stamp the time', () => {
+  assert.match(STYLE, /\.badges\{position:absolute;left:12px;bottom:12px/);
+  assert.doesNotMatch(STYLE, /badges\{[^}]*top:/);
 });
 
 test('player host fills its slot', () => {
