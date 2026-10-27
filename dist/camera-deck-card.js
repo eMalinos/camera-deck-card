@@ -15,8 +15,11 @@ const VERSION = '0.1.0';
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
 
-// Hides webrtc-camera's own header and mode label; the card draws its own overlays.
-export const PLAYER_STYLE = '.header,.mode{display:none} ha-card{background:none;border-radius:0;box-shadow:none} video{height:100%;object-fit:cover;pointer-events:none}';
+const PTZ_DIRS = ['left', 'up', 'down', 'right'];
+
+// Keeps only webrtc-camera's mode label (RTC / MSE / HLS), as a small pill bottom right;
+// the card draws its own overlays. `contain` keeps the camera's own overlays (time) in view.
+export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:auto;right:10px} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} video{height:100%;object-fit:contain;pointer-events:none}';
 
 export function normalizeConfig(config) {
   const cameras = config && config.cameras;
@@ -28,7 +31,7 @@ export function normalizeConfig(config) {
     layout_entity: config.layout_entity || null,
     cameras: cameras.map((c, i) => {
       if (!c || !c.stream) throw new Error(`camera-deck-card: cameras[${i}].stream is required`);
-      return { stream: String(c.stream), name: c.name || String(c.stream), entity: c.entity || null };
+      return { stream: String(c.stream), name: c.name || String(c.stream), entity: c.entity || null, ptz: c.ptz || null, privacy: c.privacy || null };
     }),
   };
 }
@@ -64,6 +67,20 @@ export function playerConfig(stream) {
   return { url: stream, muted: true, ui: false, intersection: 0.5, style: PLAYER_STYLE };
 }
 
+// PTZ buttons and the privacy switch: from the config, else found on the camera entity's
+// device by entity id suffix (`button.*_move_up`, `switch.*_privacy`, as Tapo names them).
+export function controlsOf(hass, cam) {
+  const dev = cam.entity && hass?.entities?.[cam.entity]?.device_id;
+  const ids = dev ? Object.values(hass.entities).filter((e) => e.device_id === dev).map((e) => e.entity_id) : [];
+  const find = (domain, suffix) => ids.find((id) => id.startsWith(domain + '.') && id.endsWith(suffix)) || null;
+  const ptzMap = cam.ptz || Object.fromEntries(PTZ_DIRS.map((d) => [d, find('button', '_move_' + d)]));
+  const privacy = cam.privacy || find('switch', '_privacy');
+  return {
+    ptz: PTZ_DIRS.filter((d) => ptzMap[d]).map((d) => ({ dir: d, entity: ptzMap[d] })),
+    privacy: privacy ? { entity: privacy, on: hass?.states?.[privacy]?.state === 'on' } : null,
+  };
+}
+
 export function viewModel(cfg, hass, state) {
   const layout = state.forceSingle ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
   const isSingle = layout === '1';
@@ -83,7 +100,10 @@ export function viewModel(cfg, hass, state) {
       page: pg.page,
       dots: Array.from({ length: pg.pages }, (_, k) => k === pg.page),
     },
-    cam: { index: ci, stream: cams[ci].stream, name: cams[ci].name, online: cams[ci].online, pos: `${ci + 1} / ${n}` },
+    cam: {
+      index: ci, stream: cams[ci].stream, name: cams[ci].name, online: cams[ci].online, pos: `${ci + 1} / ${n}`,
+      sound: !!state.sound?.[cams[ci].stream], ...(isSingle ? controlsOf(hass, cfg.cameras[ci]) : { ptz: [], privacy: null }),
+    },
     cams,
     grid: isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => c),
   };
@@ -101,8 +121,15 @@ const ICON_PATHS = {
 const LAYOUT_LABELS = { '1': '1 camera', '2': '2 cameras', '4': '4 cameras' };
 const CAMERA_ICON = (size, width) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${width}" aria-hidden="true"><path d="M3 7h12v10H3zM15 10l6-3v10l-6-3"></path></svg>`;
+const CHEVRON_PATHS = { prev: 'M15 5l-7 7 7 7', next: 'M9 5l7 7-7 7', left: 'M15 5l-7 7 7 7', right: 'M9 5l7 7-7 7', up: 'M5 15l7-7 7 7', down: 'M5 9l7 7 7-7' };
 const CHEVRON = (dir, size) =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="${dir === 'prev' ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'}"></path></svg>`;
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="${CHEVRON_PATHS[dir]}"></path></svg>`;
+const TOOL_ICON = (d) =>
+  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"></path></svg>`;
+const SOUND_ON = 'M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7';
+const SOUND_OFF = 'M4 9h4l5-4v14l-5-4H4zM17 9.5l5 5M22 9.5l-5 5';
+const PRIVACY = 'M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 4l16 16';
+const PTZ_LABELS = { left: 'Pan left', up: 'Tilt up', down: 'Tilt down', right: 'Pan right' };
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -152,13 +179,17 @@ button{font-family:inherit;cursor:pointer}
 .pdots{display:flex;gap:6px}
 .pdots span{width:6px;height:6px;border-radius:3px;background:var(--disabled-text-color,#c9c9c9)}
 .pdots span.on{width:18px;background:var(--primary-text-color,#212121)}
+.tools{display:flex;align-items:center;gap:8px}
+.tools .sp{flex:1}
+.tools button{width:44px;height:40px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
+.tools button[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
 .missing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;text-align:center;font-size:13px;color:#ffffff}
 `;
 
 class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   constructor() {
     super();
-    this._state = { layout: '1', cam: 0, page: 0, forceSingle: false };
+    this._state = { layout: '1', cam: 0, page: 0, forceSingle: false, sound: {} };
     this._players = new Map(); // stream -> webrtc-camera element
     this._thumbs = new Map(); // stream -> signed image URL
     this._vmKey = '';
@@ -238,6 +269,15 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       case 'open':
         this._set({ layout: '1', cam: Number(v), forceSingle: true });
         break;
+      case 'sound':
+        this._set({ sound: { ...this._state.sound, [vm.cam.stream]: !vm.cam.sound } });
+        break;
+      case 'press':
+        this._hass.callService('button', 'press', { entity_id: v });
+        break;
+      case 'toggle':
+        this._hass.callService('switch', 'toggle', { entity_id: v });
+        break;
     }
   }
 
@@ -297,7 +337,18 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
     return `<div class="view">${this._video(c, 44)}${this._badges(c)}<span class="pos">${c.pos}</span>${nav}<div class="vdots">${dots}</div></div>`
+      + this._tools(c)
       + `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`;
+  }
+
+  _tools(c) {
+    if (!c.online) return '';
+    const sound = `<button aria-pressed="${c.sound}" aria-label="${c.sound ? 'Mute' : 'Unmute'}" data-act="sound">${TOOL_ICON(c.sound ? SOUND_ON : SOUND_OFF)}</button>`;
+    const privacy = c.privacy
+      ? `<button aria-pressed="${c.privacy.on}" aria-label="Privacy mode" data-act="toggle" data-val="${esc(c.privacy.entity)}">${TOOL_ICON(PRIVACY)}</button>`
+      : '';
+    const ptz = c.ptz.map((p) => `<button aria-label="${PTZ_LABELS[p.dir]}" data-act="press" data-val="${esc(p.entity)}">${CHEVRON(p.dir, 20)}</button>`).join('');
+    return `<div class="tools">${sound}${privacy}<span class="sp"></span>${ptz}</div>`;
   }
 
   _grid(vm) {
@@ -339,6 +390,8 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         this._players.set(stream, el);
       }
       slot.appendChild(el); // moving an existing player keeps its stream (webrtc-camera waits 5 s before closing)
+      // Sound only on the single camera; grid tiles always stay muted.
+      if (el.video) el.video.muted = !(vm.isSingle && vm.cam.sound);
     }
     this._quietPlayers();
   }

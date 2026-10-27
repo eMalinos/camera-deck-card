@@ -17,6 +17,10 @@ A camera card for Home Assistant dashboards. It shows one camera with a strip of
 - **Shared layout**: with `layout_entity` (an `input_select` with options `1`, `2`, `4`) every device follows the same layout.
 - **Light on the cameras**: only the cameras you can see stream. Thumbnails are go2rtc frames, refreshed every 10 s while the card is visible, so they reuse go2rtc's connection to the camera.
 - **Status**: with an `entity`, a camera whose entity is `unavailable` or `unknown` shows OFFLINE and no player.
+- **Whole frame**: video is never cropped, so the camera's own overlays (time stamp) stay visible.
+- **Playback mode**: a small label shows how the video plays (`RTC`, `MSE`, `HLS`).
+- **Sound**: in layout 1 a button turns on the sound of the camera you see. Grid tiles stay muted.
+- **PTZ and privacy**: in layout 1, arrow buttons and a privacy toggle for cameras that have them. They are found on the camera entity's device (`button.*_move_left|up|down|right`, `switch.*_privacy`, as the Tapo integration names them) or set with `ptz` / `privacy`.
 - Follows your theme's card background and text colours.
 
 ## Requirements
@@ -40,6 +44,11 @@ cameras:
     entity: camera.front_door
   - stream: cam_bedroom
     name: Bedroom
+    entity: camera.bedroom
+    ptz:               # optional, found on the device when left out
+      left: button.bedroom_move_left
+      right: button.bedroom_move_right
+    privacy: switch.bedroom_privacy
 ```
 
 | Option | Required | Description |
@@ -47,7 +56,9 @@ cameras:
 | `cameras` | yes | The cameras, in order. |
 | `cameras[].stream` | yes | go2rtc stream name. |
 | `cameras[].name` | no | Name shown on the camera (default: the stream name). |
-| `cameras[].entity` | no | A `camera.*` entity for the OFFLINE status. |
+| `cameras[].entity` | no | A `camera.*` entity for the OFFLINE status and for finding PTZ / privacy entities on its device. |
+| `cameras[].ptz` | no | `button` entities to press, keys `left`, `up`, `down`, `right` (any subset). |
+| `cameras[].privacy` | no | A `switch` that hides the picture (privacy mode). |
 | `title` | no | Heading (default `Cameras`). |
 | `layout_entity` | no | `input_select` with options `1`, `2`, `4`. Without it the layout is per device. |
 
