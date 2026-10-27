@@ -61,6 +61,13 @@
   states['input_select.l'] = { state: '1' }; card.hass = { ...hass, states: { ...states } }; await tick(200);
   results.thumbsOnSingle = ws > 0 && root.querySelectorAll('.thumb img').length === 6;
 
+  // Sound: the toolbar toggle unmutes the single player and the grid mutes it again
+  click('.tools button[data-act="sound"]'); await tick();
+  const single = root.querySelector('.slot webrtc-camera');
+  results.soundOn = single.video.muted === false && root.querySelector('.tools button[data-act="sound"]').getAttribute('aria-pressed') === 'true';
+  states['input_select.l'] = { state: '2' }; card.hass = { ...hass, states: { ...states } }; await tick();
+  results.gridMuted = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => p.video.muted);
+
   const ok = Object.values(results).every(Boolean);
   document.getElementById('out').textContent = 'RESULT ' + (ok ? 'PASS ' : 'FAIL ') + JSON.stringify(results);
 </script>

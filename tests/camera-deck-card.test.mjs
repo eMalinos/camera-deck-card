@@ -1,14 +1,14 @@
 // Run: node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, PLAYER_STYLE, STYLE } from '../dist/camera-deck-card.js';
+import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, PLAYER_STYLE, STYLE } from '../dist/camera-deck-card.js';
 
 const hass = (states) => ({ states: Object.fromEntries(Object.entries(states).map(([k, v]) => [k, { state: v }])) });
 const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) => ({ stream: `s${i}`, name: `Cam ${i}` })) });
 
 test('normalizeConfig fills defaults and rejects missing cameras/stream', () => {
   assert.deepEqual(normalizeConfig({ cameras: [{ stream: 'cam_entry' }] }),
-    { title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null }] });
+    { title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null, ptz: null, privacy: null }] });
   assert.throws(() => normalizeConfig({}), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [] }), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [{ name: 'x' }] }), /cameras\[0\]\.stream is required/);
@@ -45,7 +45,36 @@ test('posterPath and playerConfig encode the stream and never use entity', () =>
   assert.equal(p.url, 'cam_entry');
   assert.equal(p.muted, true);
   assert.equal('entity' in p, false);
-  assert.match(p.style, /\.mode/);
+  assert.match(p.style, /\.status\{display:none\}/);
+  assert.doesNotMatch(p.style, /\.mode\{display:none/); // RTC / MSE label stays visible
+});
+
+test('player keeps the whole frame (camera time overlay is not cropped)', () => {
+  assert.match(PLAYER_STYLE, /video\{[^}]*object-fit:contain/);
+});
+
+test('controlsOf finds PTZ buttons and privacy switch on the camera device, config wins', () => {
+  const h = {
+    states: { 'switch.bed_privacy': { state: 'on' } },
+    entities: Object.fromEntries([
+      ['camera.bed', 'd1'], ['button.bed_move_up', 'd1'], ['button.bed_move_left', 'd1'], ['switch.bed_privacy', 'd1'],
+      ['button.other_move_down', 'd2'], ['button.bed_reboot', 'd1'],
+    ].map(([id, dev]) => [id, { entity_id: id, device_id: dev }])),
+  };
+  const c = controlsOf(h, { entity: 'camera.bed' });
+  assert.deepEqual(c.ptz, [{ dir: 'left', entity: 'button.bed_move_left' }, { dir: 'up', entity: 'button.bed_move_up' }]);
+  assert.deepEqual(c.privacy, { entity: 'switch.bed_privacy', on: true });
+  assert.deepEqual(controlsOf(h, { entity: 'camera.bed', ptz: { right: 'button.x' }, privacy: 'switch.y' }),
+    { ptz: [{ dir: 'right', entity: 'button.x' }], privacy: { entity: 'switch.y', on: false } });
+  assert.deepEqual(controlsOf({ states: {} }, { entity: 'camera.bed' }), { ptz: [], privacy: null });
+  assert.deepEqual(controlsOf(h, { entity: null }), { ptz: [], privacy: null });
+});
+
+test('viewModel sound is per stream and controls only in the single layout', () => {
+  const c = cfg(2);
+  assert.equal(viewModel(c, hass({}), { layout: '1', cam: 1, page: 0, sound: { s1: true } }).cam.sound, true);
+  assert.equal(viewModel(c, hass({}), { layout: '1', cam: 0, page: 0, sound: { s1: true } }).cam.sound, false);
+  assert.deepEqual(viewModel(c, hass({}), { layout: '2', cam: 0, page: 0 }).cam.ptz, []);
 });
 
 test('viewModel single layout', () => {

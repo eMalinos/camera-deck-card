@@ -19,7 +19,7 @@
     set hass(h) {}
     connectedCallback() {
       this.style.cssText = 'display:block;width:100%;height:100%';
-      this.innerHTML = `<div style="width:100%;height:100%;background:linear-gradient(135deg,#3a4250,#20242a);color:rgba(255,255,255,.55);display:flex;align-items:flex-end;justify-content:flex-end;padding:8px;box-sizing:border-box;font-size:11px">${this.config.url}</div>`;
+      this.innerHTML = `<div style="width:100%;height:100%;background:linear-gradient(135deg,#3a4250,#20242a);color:rgba(255,255,255,.55);display:flex;align-items:flex-end;justify-content:flex-end;padding:8px;box-sizing:border-box;font-size:11px">${this.config.url} · RTC</div>`;
     }
   });
 
@@ -31,12 +31,19 @@
   const states = {
     'input_select.hfb_cameras_layout': { state: '1' },
     'camera.garden': { state: 'unavailable' },
+    'camera.bedroom': { state: 'idle' },
+    'switch.bedroom_privacy': { state: 'off' },
   };
+  // The bedroom camera's device has PTZ buttons and a privacy switch (found by the card).
+  const entities = Object.fromEntries(['camera.bedroom', 'button.bedroom_move_left', 'button.bedroom_move_up', 'button.bedroom_move_down', 'button.bedroom_move_right', 'switch.bedroom_privacy']
+    .map((id) => [id, { entity_id: id, device_id: 'bedroom' }]));
   const cards = [];
   const hass = {
     states,
+    entities,
     callService(domain, service, data) {
-      states[data.entity_id] = { state: data.option };
+      if (domain === 'input_select') states[data.entity_id] = { state: data.option };
+      if (domain === 'switch') states[data.entity_id] = { state: states[data.entity_id]?.state === 'on' ? 'off' : 'on' };
       cards.forEach((c) => { c.hass = { ...hass, states: { ...states } }; });
     },
     callWS: async (msg) => ({ path: thumb(decodeURIComponent(msg.path.split('poster=')[1])) }),
@@ -45,11 +52,12 @@
   const cameras = [
     { stream: 'cam_front_door', name: 'Front door' },
     { stream: 'cam_kids_room', name: 'Kids room' },
-    { stream: 'cam_bedroom', name: 'Bedroom' },
+    { stream: 'cam_bedroom', name: 'Bedroom', entity: 'camera.bedroom' },
     { stream: 'cam_living_room', name: 'Living room' },
     { stream: 'cam_garden', name: 'Garden', entity: 'camera.garden' },
   ];
-  const layout = new URLSearchParams(location.search).get('layout') || '1';
+  const params = new URLSearchParams(location.search);
+  const layout = params.get('layout') || '1';
   states['input_select.hfb_cameras_layout'] = { state: layout };
 
   for (const [cls, label] of [['wide', 'Tablet / desktop (640 px)'], ['phone', 'Phone (398 px)']]) {
@@ -60,6 +68,7 @@
     card.setConfig({ layout_entity: 'input_select.hfb_cameras_layout', cameras });
     card.hass = hass;
     col.appendChild(card);
+    if (params.has('cam')) card._set({ cam: Number(params.get('cam')) });
     document.body.appendChild(col);
     cards.push(card);
   }
