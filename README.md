@@ -19,7 +19,9 @@ A camera card for Home Assistant dashboards. It shows one camera with a strip of
 - **Status**: with an `entity`, a camera whose entity is `unavailable` or `unknown` shows OFFLINE and no player.
 - **Whole frame**: video is never cropped, so the camera's own overlays (time stamp) stay visible.
 - **Playback mode**: a small label shows how the video plays (`RTC`, `MSE`, `HLS`).
-- **Sound**: per camera. In layout 1 the toolbar button, in the grid one button for every camera on the page; a tile with sound shows a speaker.
+- **Sound**: per camera. In layout 1 the toolbar button, in the grid one button for every camera on the page; a tile with sound shows a speaker. `sound: true` turns it on when the card loads; a browser that blocks sound before the first tap plays the camera muted, and the first tap anywhere on the page turns the sound on.
+- **Full screen**: the button in the heading shows the whole card full screen in its layout (two cameras side by side on a landscape screen, one above the other on a portrait one). The button on a camera shows only that camera with its toolbar. On iPhone, which has no full screen for page elements, the card covers the page instead.
+- **Overlays**: LIVE / OFFLINE and the camera name sit top right (cameras usually stamp the time top left) and are hidden on a card narrower than 500 px.
 - **Camera switch**: the picture slides left / right (off with the system's reduce-motion setting).
 - **PTZ and privacy**: in layout 1, arrow buttons and a privacy toggle for cameras that have them. They are found on the camera entity's device (`button.*_move_left|up|down|right`, `switch.*_privacy`, as the Tapo integration names them) or set with `ptz` / `privacy`.
 - Follows your theme's card background and text colours.
@@ -50,6 +52,7 @@ cameras:
       left: button.bedroom_move_left
       right: button.bedroom_move_right
     privacy: switch.bedroom_privacy
+    sound: true        # optional, start with sound
 ```
 
 | Option | Required | Description |
@@ -60,6 +63,7 @@ cameras:
 | `cameras[].entity` | no | A `camera.*` entity for the OFFLINE status and for finding PTZ / privacy entities on its device. |
 | `cameras[].ptz` | no | `button` entities to press, keys `left`, `up`, `down`, `right` (any subset). |
 | `cameras[].privacy` | no | A `switch` that hides the picture (privacy mode). |
+| `cameras[].sound` | no | `true` to start the camera with sound (default `false`). |
 | `title` | no | Heading (default `Cameras`). |
 | `layout_entity` | no | `input_select` with options `1`, `2`, `4`. Without it the layout is per device. |
 
@@ -67,4 +71,4 @@ There is no visual editor yet.
 
 ## Development
 
-`demo.html` renders the card with a stub player and a fake `hass` (serve the folder, e.g. `python3 -m http.server`, and open `demo.html?layout=1|2|4`). Unit tests: `node --test tests/*.test.mjs`. Browser checks (player lifecycle, strip, thumbnails): open `tests/dom.html` from the served folder, it prints `RESULT PASS`.
+`demo.html` renders the card with a stub player and a fake `hass` (serve the folder, e.g. `python3 -m http.server`, and open `demo.html?layout=1|2|4`). Unit tests: `node --test tests/*.test.mjs`. Browser checks (player lifecycle, strip, thumbnails, sound, full screen): open `tests/dom.html` from the served folder in a browser started with `--autoplay-policy=no-user-gesture-required`, it prints `RESULT PASS`.

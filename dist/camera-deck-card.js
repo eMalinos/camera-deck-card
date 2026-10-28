@@ -17,10 +17,11 @@ const OFFLINE_STATES = ['unavailable', 'unknown'];
 
 const PTZ_DIRS = ['left', 'up', 'down', 'right'];
 
-// Card badges sit bottom left: cameras usually stamp the time top left.
-// Keeps only webrtc-camera's mode label (RTC / MSE / HLS), as a small pill bottom right;
-// the card draws its own overlays. `contain` keeps the camera's own overlays (time) in view.
-export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:auto;right:10px} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} .player{background:none} video{height:100%;object-fit:contain;pointer-events:none}';
+// Card badges sit top right: cameras usually stamp the time top left.
+// Keeps only webrtc-camera's mode label (RTC / MSE / HLS), as a small pill bottom left
+// (bottom right is the full screen button); the card draws its own overlays.
+// `contain` keeps the camera's own overlays (time) in view.
+export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:10px;right:auto} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} .player{background:none} video{height:100%;object-fit:contain;pointer-events:none}';
 
 export function normalizeConfig(config) {
   const cameras = config && config.cameras;
@@ -32,7 +33,7 @@ export function normalizeConfig(config) {
     layout_entity: config.layout_entity || null,
     cameras: cameras.map((c, i) => {
       if (!c || !c.stream) throw new Error(`camera-deck-card: cameras[${i}].stream is required`);
-      return { stream: String(c.stream), name: c.name || String(c.stream), entity: c.entity || null, ptz: c.ptz || null, privacy: c.privacy || null };
+      return { stream: String(c.stream), name: c.name || String(c.stream), entity: c.entity || null, ptz: c.ptz || null, privacy: c.privacy || null, sound: !!c.sound };
     }),
   };
 }
@@ -64,8 +65,8 @@ export function posterPath(stream) {
   return '/api/webrtc/ws?poster=' + encodeURIComponent(stream);
 }
 
-export function playerConfig(stream) {
-  return { url: stream, muted: true, ui: false, intersection: 0.5, style: PLAYER_STYLE };
+export function playerConfig(stream, sound = false) {
+  return { url: stream, muted: !sound, ui: false, intersection: 0.5, style: PLAYER_STYLE };
 }
 
 // PTZ buttons and the privacy switch: from the config, else found on the camera entity's
@@ -83,18 +84,21 @@ export function controlsOf(hass, cam) {
 }
 
 export function viewModel(cfg, hass, state) {
-  const layout = state.forceSingle ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
+  const layout = state.forceSingle || state.fs === 'cam' ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
   const isSingle = layout === '1';
   const n = cfg.cameras.length;
   const ci = wrap(state.cam || 0, n);
   const cams = cfg.cameras.map((c, i) => ({
     index: i, stream: c.stream, name: c.name, online: isOnline(hass, c.entity), selected: i === ci, sound: !!state.sound?.[c.stream],
+    // Sound wanted but the browser blocked it until the first tap on the page.
+    waiting: !!state.sound?.[c.stream] && !!state.blocked?.[c.stream],
   }));
   const pg = pageOf(n, isSingle ? 1 : Number(layout), state.page);
   const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => c);
   return {
     title: cfg.title,
     layout,
+    fs: state.fs || null,
     isSingle,
     pager: {
       label: isSingle ? '' : `Page ${pg.page + 1} / ${pg.pages}`,
@@ -104,12 +108,13 @@ export function viewModel(cfg, hass, state) {
     },
     cam: {
       index: ci, stream: cams[ci].stream, name: cams[ci].name, online: cams[ci].online, pos: `${ci + 1} / ${n}`,
-      sound: cams[ci].sound, ...(isSingle ? controlsOf(hass, cfg.cameras[ci]) : { ptz: [], privacy: null }),
+      sound: cams[ci].sound, waiting: cams[ci].waiting, ...(isSingle ? controlsOf(hass, cfg.cameras[ci]) : { ptz: [], privacy: null }),
     },
     cams,
     grid,
     // Grid sound button: on when every camera on the page has sound.
     gridSound: grid.length > 0 && grid.every((c) => c.sound),
+    gridWaiting: grid.some((c) => c.waiting),
   };
 }
 
@@ -132,6 +137,8 @@ const TOOL_ICON = (d) =>
   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"></path></svg>`;
 const SOUND_ON = 'M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7';
 const SOUND_OFF = 'M4 9h4l5-4v14l-5-4H4zM17 9.5l5 5M22 9.5l-5 5';
+const FS = 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5';
+const FS_EXIT = 'M9 4v5H4M15 4v5h5M20 15h-5v5M4 15h5v5';
 const PRIVACY = 'M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4 4l16 16';
 const PTZ_LABELS = { left: 'Pan left', up: 'Tilt up', down: 'Tilt down', right: 'Pan right' };
 
@@ -139,7 +146,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 export const STYLE = `
 :host{display:block}
-.card{background:var(--ha-card-background,var(--card-background-color,#ffffff));color:var(--primary-text-color,#212121);border-radius:20px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:10px;font-family:inherit}
+:host([fs]){position:fixed;inset:0;z-index:9999}
+.card{container-type:inline-size;background:var(--ha-card-background,var(--card-background-color,#ffffff));color:var(--primary-text-color,#212121);border-radius:20px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:10px;font-family:inherit}
 button{font-family:inherit;cursor:pointer}
 .head{display:flex;align-items:center;gap:10px;padding:2px 4px 0}
 .head h2{margin:0;flex:1;font-size:16px;font-weight:500}
@@ -152,11 +160,13 @@ button{font-family:inherit;cursor:pointer}
 .slot>webrtc-camera{display:block;width:100%;height:100%}
 .out{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000000}
 .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:12px;color:rgba(255,255,255,.35)}
-.badges{position:absolute;left:12px;bottom:12px;display:flex;gap:8px;align-items:center}
+.top{position:absolute;right:12px;top:12px;display:flex;gap:8px;align-items:center}
+.badges{display:flex;gap:8px;align-items:center}
+@container (max-width:500px){.badges{display:none}}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
 .badge.off{background:#616161}
 .pill{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px;font-weight:500}
-.pos{position:absolute;right:12px;top:12px;background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px}
+.pos{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px}
 .nav{position:absolute;top:50%;margin-top:-22px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.85);color:#212121;display:flex;align-items:center;justify-content:center}
 .nav.prev{left:10px}.nav.next{right:10px}
 .strip{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 4px}
@@ -170,16 +180,18 @@ button{font-family:inherit;cursor:pointer}
 .dot{width:7px;height:7px;border-radius:50%;flex:none;background:#43a047}
 .off .dot,.dot.off{background:#9e9e9e}
 .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.cell{position:relative;min-width:0}
 .tile{position:relative;border:0;padding:0;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#2b3036}
 .tile.off{opacity:.6}
 .tile .slot{pointer-events:none}
-.tile .badges{left:8px;bottom:8px;gap:6px}
+.tile .top{right:8px;top:8px;gap:6px}
+.tile .badges{gap:6px}
 .tile .badge{border-radius:8px;padding:3px 8px;font-size:10px}
 .tile .pill{border-radius:8px;padding:3px 8px;font-size:11px}
 .pager{position:relative;display:flex;align-items:center;justify-content:center;gap:12px}
 .pager .snd{position:absolute;left:0}
 .pager .snd[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
-.pill.snd{position:absolute;right:8px;top:8px;display:flex;padding:3px 6px}
+.pill.snd{display:flex;padding:3px 6px}
 .pill.snd svg{width:14px;height:14px}
 .pager button{width:44px;height:44px;border-radius:50%;border:0;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121);display:flex;align-items:center;justify-content:center}
 .pdots{display:flex;gap:6px}
@@ -189,14 +201,23 @@ button{font-family:inherit;cursor:pointer}
 .tools .sp{flex:1}
 .tools button{width:44px;height:40px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
 .tools button[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
+.fsb{position:absolute;right:10px;bottom:10px;width:36px;height:36px;border:0;border-radius:10px;background:rgba(0,0,0,.55);color:#ffffff;display:flex;align-items:center;justify-content:center}
+.cell .fsb{right:8px;bottom:8px;width:32px;height:32px}
+.hbtn{width:42px;height:42px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
+.card.fs{height:100%;box-sizing:border-box;border-radius:0}
+.fs .view{flex:1;min-height:0;aspect-ratio:auto}
+.fs .grid{flex:1;min-height:0;grid-auto-rows:minmax(0,1fr)}
+.fs .tile{height:100%;aspect-ratio:auto}
+@media (orientation:portrait){.fs .grid.n2{grid-template-columns:minmax(0,1fr)}}
 .missing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;text-align:center;font-size:13px;color:#ffffff}
 `;
 
 class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   constructor() {
     super();
-    this._state = { layout: '1', cam: 0, page: 0, forceSingle: false, sound: {} };
+    this._state = { layout: '1', cam: 0, page: 0, forceSingle: false, sound: {}, blocked: {}, fs: null };
     this._players = new Map(); // stream -> webrtc-camera element
+    this._watched = new WeakSet(); // videos with a volumechange listener
     this._thumbs = new Map(); // stream -> signed image URL
     this._vmKey = '';
     this._layoutState = undefined;
@@ -204,6 +225,17 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.addEventListener('click', (e) => this._onClick(e));
     this._onVisibility = () => { if (document.visibilityState === 'visible') this._refreshThumbs(); };
+    // Full screen left with Esc / the system gesture.
+    this._onFullscreen = () => {
+      if (document.fullscreenElement === this) this._native = true;
+      else if (this._native) this._exitFs();
+    };
+    // Any tap on the page lets the browser play sound it blocked on load.
+    // Taps on this card's sound buttons unlock in _onClick.
+    this._onGesture = (e) => {
+      const path = e.composedPath();
+      if (Object.keys(this._state.blocked).length && !(path.includes(this) && path[0]?.closest?.('[data-act$="sound"]'))) this._unlockSound();
+    };
   }
 
   static getStubConfig() {
@@ -212,6 +244,8 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
 
   setConfig(config) {
     this._cfg = normalizeConfig(config);
+    this._state.sound = Object.fromEntries(this._cfg.cameras.filter((c) => c.sound).map((c) => [c.stream, true]));
+    this._state.blocked = {};
     this._vmKey = '';
     if (this._hass) this._render();
   }
@@ -235,6 +269,9 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
 
   connectedCallback() {
     document.addEventListener('visibilitychange', this._onVisibility);
+    document.addEventListener('fullscreenchange', this._onFullscreen);
+    document.addEventListener('click', this._onGesture, true);
+    document.addEventListener('touchend', this._onGesture, true); // iOS sends no click for taps on plain elements
     this._timer = setInterval(() => this._refreshThumbs(), THUMB_REFRESH_MS);
     this._refreshThumbs();
     requestAnimationFrame(() => this._quietPlayers()); // players connect after the card
@@ -242,7 +279,11 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
 
   disconnectedCallback() {
     document.removeEventListener('visibilitychange', this._onVisibility);
+    document.removeEventListener('fullscreenchange', this._onFullscreen);
+    document.removeEventListener('click', this._onGesture, true);
+    document.removeEventListener('touchend', this._onGesture, true);
     clearInterval(this._timer);
+    if (this._state.fs) this._exitFs(); // the browser leaves full screen with the element
   }
 
   _set(patch) {
@@ -278,10 +319,20 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         this._set({ layout: '1', cam: Number(v), forceSingle: true });
         break;
       case 'sound':
-        this._set({ sound: { ...this._state.sound, [vm.cam.stream]: !vm.cam.sound } });
+        if (vm.cam.waiting) this._unlockSound();
+        else this._set({ sound: { ...this._state.sound, [vm.cam.stream]: !vm.cam.sound }, blocked: {} });
         break;
       case 'grid-sound':
-        this._set({ sound: { ...this._state.sound, ...Object.fromEntries(vm.grid.map((c) => [c.stream, !vm.gridSound])) } });
+        if (vm.gridWaiting) this._unlockSound();
+        else this._set({ sound: { ...this._state.sound, ...Object.fromEntries(vm.grid.map((c) => [c.stream, !vm.gridSound])) }, blocked: {} });
+        break;
+      case 'fs':
+        if (vm.fs) this._exitFs(); else this._enterFs('deck', {});
+        break;
+      case 'fs-cam':
+        if (vm.fs !== 'cam') this._enterFs('cam', { cam: Number(v) });
+        else if (this._backToDeck) this._set({ fs: 'deck' });
+        else this._exitFs();
         break;
       case 'press':
         this._hass.callService('button', 'press', { entity_id: v });
@@ -290,6 +341,30 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         this._hass.callService('switch', 'toggle', { entity_id: v });
         break;
     }
+  }
+
+  // The card itself goes full screen, so re-renders keep it there and players keep streaming.
+  // It covers the page with CSS right away (all iPhone gets: no element full screen there),
+  // then asks for real full screen, which some webviews never answer.
+  // ponytail: CSS cover is position:fixed, breaks under an ancestor with transform; add a body-level overlay if a dashboard needs it.
+  _enterFs(mode, patch) {
+    this._backToDeck = this._state.fs === 'deck';
+    this._set({ ...patch, fs: mode });
+    if (this.hasAttribute('fs')) return; // deck <-> camera
+    this.setAttribute('fs', '');
+    if (document.fullscreenEnabled) this.requestFullscreen?.().catch(() => {});
+  }
+
+  _exitFs() {
+    this._native = false;
+    this.removeAttribute('fs');
+    if (document.fullscreenElement === this) document.exitFullscreen().catch(() => {});
+    this._set({ fs: null });
+  }
+
+  // Inside a user gesture: unmute the cameras whose sound the browser blocked.
+  _unlockSound() {
+    this._set({ blocked: {} });
   }
 
   _render() {
@@ -306,11 +381,12 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     const scroll = this.shadowRoot.querySelector('.strip')?.scrollLeft || 0;
     const wasSingle = this._wasSingle;
     this._wasSingle = vm.isSingle;
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card">${this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card${vm.fs ? ' fs' : ''}">${vm.fs === 'cam' ? '' : this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
     this._mountPlayers(vm);
     if (!vm.isSingle) return;
     if (slide) this._slideIn(out, slide);
     const strip = this.shadowRoot.querySelector('.strip');
+    if (!strip) return; // camera full screen
     strip.scrollLeft = scroll;
     const sel = strip.querySelector('.thumb[aria-selected="true"]');
     if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) {
@@ -350,11 +426,20 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _head(vm) {
     const btns = ['1', '2', '4'].map((id) =>
       `<button role="radio" aria-checked="${vm.layout === id}" aria-label="${LAYOUT_LABELS[id]}" data-act="layout" data-val="${id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${ICON_PATHS[id]}</svg></button>`).join('');
-    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span><div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div></div>`;
+    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span><div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div><button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
   }
 
-  _badges(c) {
-    return `<span class="badges"><span class="badge${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span><span class="pill">${esc(c.name)}</span></span>`;
+  // Top right row: LIVE / OFFLINE and the name (hidden on a narrow card), then `extra`.
+  _top(c, extra) {
+    return `<span class="top"><span class="badges"><span class="badge${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span><span class="pill">${esc(c.name)}</span></span>${extra}</span>`;
+  }
+
+  _fsBtn(index, on) {
+    return `<button class="fsb" aria-label="${on ? 'Exit full screen' : 'Full screen'}" data-act="fs-cam" data-val="${index}">${TOOL_ICON(on ? FS_EXIT : FS)}</button>`;
+  }
+
+  _soundIcon(c) {
+    return TOOL_ICON(c.sound && !c.waiting ? SOUND_ON : SOUND_OFF);
   }
 
   _video(c, iconSize) {
@@ -377,14 +462,14 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       const img = src ? `<img alt="" src="${esc(src)}">` : `<span class="ph">${CAMERA_ICON(20, 1.5)}</span>`;
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
-    return `<div class="view">${this._video(c, 44)}${this._badges(c)}<span class="pos">${c.pos}</span>${nav}</div>`
+    return `<div class="view">${this._video(c, 44)}${this._top(c, `<span class="pos">${c.pos}</span>`)}${nav}${this._fsBtn(c.index, vm.fs === 'cam')}</div>`
       + this._tools(c)
-      + `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`;
+      + (vm.fs === 'cam' ? '' : `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`);
   }
 
   _tools(c) {
     if (!c.online) return '';
-    const sound = `<button aria-pressed="${c.sound}" aria-label="${c.sound ? 'Mute' : 'Unmute'}" data-act="sound">${TOOL_ICON(c.sound ? SOUND_ON : SOUND_OFF)}</button>`;
+    const sound = `<button aria-pressed="${c.sound}" aria-label="${c.waiting ? 'Tap to turn sound on' : c.sound ? 'Mute' : 'Unmute'}" data-act="sound">${this._soundIcon(c)}</button>`;
     const privacy = c.privacy
       ? `<button aria-pressed="${c.privacy.on}" aria-label="Privacy mode" data-act="toggle" data-val="${esc(c.privacy.entity)}">${TOOL_ICON(PRIVACY)}</button>`
       : '';
@@ -393,11 +478,14 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   }
 
   _grid(vm) {
-    const tiles = vm.grid.map((c) =>
-      `<button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._badges(c)}${c.online && c.sound ? `<span class="pill snd" aria-label="Sound on">${TOOL_ICON(SOUND_ON)}</span>` : ''}</button>`).join('');
+    // The full screen button sits next to the tile: a button can't hold another button.
+    const tiles = vm.grid.map((c) => {
+      const snd = c.online && c.sound ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
+      return `<div class="cell"><button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._top(c, snd)}</button>${this._fsBtn(c.index, false)}</div>`;
+    }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
-    const sound = `<button class="snd" aria-pressed="${vm.gridSound}" aria-label="${vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${TOOL_ICON(vm.gridSound ? SOUND_ON : SOUND_OFF)}</button>`;
-    return `<div class="grid">${tiles}</div><div class="pager">${sound}<button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
+    const sound = `<button class="snd" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`;
+    return `<div class="grid n${vm.grid.length}">${tiles}</div><div class="pager">${sound}<button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
   }
 
   async _mountPlayers(vm) {
@@ -427,19 +515,53 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       let el = this._players.get(stream);
       if (!el) {
         el = document.createElement('webrtc-camera');
-        el.setConfig(playerConfig(stream));
+        el.setConfig(playerConfig(stream, this._wantsSound(stream)));
         el.hass = this._hass;
         this._players.set(stream, el);
       }
       slot.appendChild(el); // moving an existing player keeps its stream (webrtc-camera waits 5 s before closing)
-      if (el.video) el.video.muted = !this._state.sound[stream];
+      this._applySound(stream, el.video);
     }
     this._quietPlayers();
   }
 
+  _wantsSound(stream) {
+    return !!this._state.sound[stream] && !this._state.blocked[stream];
+  }
+
+  // A video exists once its player is connected (the card may not be yet).
+  _applySound(stream, v) {
+    if (!v) return;
+    if (!this._watched.has(v)) {
+      this._watched.add(v);
+      // The player mutes itself when the browser refuses sound before the first tap.
+      v.addEventListener('volumechange', () => this._onVolume(stream, v));
+    }
+    const want = this._wantsSound(stream);
+    if (v.muted === !want) return;
+    v.muted = !want;
+    // Unmuting without a tap pauses the video: play on muted (marks the camera as waiting).
+    if (want) v.play().catch((e) => { if (e.name === 'NotAllowedError') { v.muted = true; v.play().catch(() => {}); } });
+  }
+
+  // The player muted itself (sound refused, or a reconnect): unmute again, wait for a tap only if the browser refuses.
+  _onVolume(stream, v) {
+    if (!v.muted || !this._wantsSound(stream)) return;
+    v.muted = false;
+    v.play().catch((e) => {
+      if (e.name !== 'NotAllowedError') return;
+      this._set({ blocked: { ...this._state.blocked, [stream]: true } });
+      v.muted = true;
+      v.play().catch(() => {});
+    });
+  }
+
   // video-rtc turns native controls on (on connect) unless its own UI is on.
   _quietPlayers() {
-    for (const el of this._players.values()) if (el.video) el.video.controls = false;
+    for (const [stream, el] of this._players) {
+      if (el.video) el.video.controls = false;
+      if (el.isConnected) this._applySound(stream, el.video);
+    }
   }
 
   async _refreshThumbs() {
