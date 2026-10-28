@@ -8,7 +8,8 @@ const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) =
 
 test('normalizeConfig fills defaults and rejects missing cameras/stream', () => {
   assert.deepEqual(normalizeConfig({ cameras: [{ stream: 'cam_entry' }] }),
-    { title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null, ptz: null, privacy: null }] });
+    { title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null, ptz: null, privacy: null, sound: false }] });
+  assert.equal(normalizeConfig({ cameras: [{ stream: 'a', sound: true }] }).cameras[0].sound, true);
   assert.throws(() => normalizeConfig({}), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [] }), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [{ name: 'x' }] }), /cameras\[0\]\.stream is required/);
@@ -45,8 +46,10 @@ test('posterPath and playerConfig encode the stream and never use entity', () =>
   assert.equal(p.url, 'cam_entry');
   assert.equal(p.muted, true);
   assert.equal('entity' in p, false);
+  assert.equal(playerConfig('a', true).muted, false);
   assert.match(p.style, /\.status\{display:none\}/);
   assert.doesNotMatch(p.style, /\.mode\{display:none/); // RTC / MSE label stays visible
+  assert.match(p.style, /\.header\{top:auto;bottom:8px;left:10px/); // bottom left, the full screen button is bottom right
 });
 
 test('player keeps the whole frame (camera time overlay is not cropped)', () => {
@@ -116,7 +119,7 @@ test('player video ignores taps (no native controls over the overlays)', () => {
 
 test('card colours follow the theme: hex colours only as var() fallbacks, except badges/overlays', () => {
   const fixed = ['#000000', '#d32f2f', '#616161', '#ffffff', '#43a047', '#9e9e9e', '#2b3036', '#212121'];
-  const allowedIn = (sel) => /badge|nav|pos|pill|ph|missing|\.view|\.tile|\.img|\.dot|\.off|\.out/.test(sel);
+  const allowedIn = (sel) => /badge|nav|pos|pill|ph|missing|fsb|\.view|\.tile|\.img|\.dot|\.off|\.out/.test(sel);
   const rules = STYLE.replace(/var\([^()]*(\([^()]*\)[^()]*)*\)/g, '').split('}');
   for (const r of rules) {
     const [sel, body = ''] = r.split('{');
@@ -126,9 +129,26 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
   }
 });
 
-test('card badges stay off the top left corner, where cameras stamp the time', () => {
-  assert.match(STYLE, /\.badges\{position:absolute;left:12px;bottom:12px/);
-  assert.doesNotMatch(STYLE, /badges\{[^}]*top:/);
+test('card badges sit top right (cameras stamp the time top left) and hide on a narrow card', () => {
+  assert.match(STYLE, /\.top\{position:absolute;right:12px;top:12px/);
+  assert.doesNotMatch(STYLE, /\.top\{[^}]*left:/);
+  assert.match(STYLE, /@container \(max-width:500px\)\{\.badges\{display:none\}\}/);
+});
+
+test('viewModel waiting: sound wanted but blocked by the browser', () => {
+  const c = cfg(2);
+  const vm = viewModel(c, hass({}), { layout: '2', cam: 0, page: 0, sound: { s0: true }, blocked: { s0: true, s1: true } });
+  assert.deepEqual(vm.grid.map((g) => g.waiting), [true, false]);
+  assert.equal(vm.gridWaiting, true);
+  assert.equal(viewModel(c, hass({}), { layout: '1', cam: 0, page: 0, sound: { s0: true } }).cam.waiting, false);
+});
+
+test('viewModel camera full screen shows one camera over a grid layout', () => {
+  const vm = viewModel(cfg(4), hass({}), { layout: '4', cam: 2, page: 0, fs: 'cam' });
+  assert.equal(vm.isSingle, true);
+  assert.equal(vm.cam.index, 2);
+  assert.equal(vm.fs, 'cam');
+  assert.equal(viewModel(cfg(4), hass({}), { layout: '4', cam: 0, page: 0, fs: 'deck' }).isSingle, false);
 });
 
 test('player host fills its slot', () => {
