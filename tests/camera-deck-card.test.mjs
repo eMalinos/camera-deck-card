@@ -154,3 +154,7 @@ test('viewModel camera full screen shows one camera over a grid layout', () => {
 test('player host fills its slot', () => {
   assert.match(STYLE, /\.slot>webrtc-camera\{display:block;width:100%;height:100%\}/);
 });
+
+test('viewModel one camera is always the single layout', () => {
+  assert.equal(viewModel(cfg(1), hass({}), { layout: '4', cam: 0, page: 0 }).isSingle, true);
+});
