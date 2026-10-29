@@ -70,32 +70,33 @@
   states['input_select.l'] = { state: '1' }; card.hass = { ...hass, states: { ...states } }; await tick(200);
   results.thumbsOnSingle = ws > 0 && root.querySelectorAll('.thumb img').length === 6;
 
-  // Sound: the toolbar toggle unmutes the single player; other cameras stay muted in the grid
-  click('.tools button[data-act="sound"]'); await tick();
+  // Sound: the heading toggle unmutes the single player; other cameras stay muted in the grid
+  click('.head [data-act="sound"]'); await tick();
   const single = root.querySelector('.slot webrtc-camera');
-  results.soundOn = single.video.muted === false && root.querySelector('.tools button[data-act="sound"]').getAttribute('aria-pressed') === 'true';
+  results.soundOn = single.video.muted === false && root.querySelector('.head [data-act="sound"]').getAttribute('aria-pressed') === 'true';
   states['input_select.l'] = { state: '2' }; card.hass = { ...hass, states: { ...states } }; await tick();
   results.gridMuted = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => p.video.muted);
   // The grid button unmutes every camera on the page, then mutes them again
-  click('.pager .snd'); await tick();
+  click('.head [data-act="grid-sound"]'); await tick();
   results.gridSoundOn = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => !p.video.muted) && root.querySelectorAll('.pill.snd').length === 2;
-  click('.pager .snd'); await tick();
+  click('.head [data-act="grid-sound"]'); await tick();
   results.gridSoundOff = [...root.querySelectorAll('.slot webrtc-camera')].every((p) => p.video.muted);
 
   // Sound blocked by the browser (the player mutes itself): the camera waits, a tap anywhere unmutes it
-  click('.pager .snd'); await tick();
+  click('.head [data-act="grid-sound"]'); await tick();
   const blockedVideo = root.querySelector('.slot webrtc-camera').video;
   blockedVideo.play = () => Promise.reject(new DOMException('blocked', 'NotAllowedError'));
   blockedVideo.muted = true; await tick();
-  results.soundWaits = root.querySelector('.pager .snd').getAttribute('aria-label') === 'Tap to turn sound on' && blockedVideo.muted;
+  results.soundWaits = root.querySelector('.head [data-act="grid-sound"]').getAttribute('aria-label') === 'Tap to turn sound on' && blockedVideo.muted;
   delete blockedVideo.play;
   document.body.click(); await tick();
-  results.soundUnlocked = !blockedVideo.muted && root.querySelector('.pager .snd').getAttribute('aria-label') === 'Mute all';
-  click('.pager .snd'); await tick();
+  results.soundUnlocked = !blockedVideo.muted && root.querySelector('.head [data-act="grid-sound"]').getAttribute('aria-label') === 'Mute all';
+  click('.head [data-act="grid-sound"]'); await tick();
 
   // Camera full screen from a tile (headless has no element full screen: CSS fallback), the deck stays a grid after exit
   click('.cell .fsb[data-val="1"]'); await tick();
   results.camFs = card.hasAttribute('fs') && root.querySelector('.card.fs .view') && !root.querySelector('.strip') && !root.querySelector('.head')
+    && !!root.querySelector('.tools [data-act="sound"]') // no heading: sound under the camera
     && root.querySelector('.fsb').getAttribute('aria-label') === 'Exit full screen';
   click('.fsb'); await tick();
   results.camFsExit = !card.hasAttribute('fs') && root.querySelectorAll('.tile').length === 2;
