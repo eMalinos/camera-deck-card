@@ -31,7 +31,11 @@
   const cameras = Array.from({ length: 6 }, (_, i) => ({ stream: 's' + i, name: 'Camera ' + i }));
   const box = document.createElement('div');
   box.style.width = '398px';
-  document.body.appendChild(box);
+  box.style.transform = 'translateZ(0)'; // like HA's layout: traps position:fixed
+  // Nested in a shadow root like in HA
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  host.attachShadow({ mode: 'open' }).appendChild(box);
   const card = document.createElement('camera-deck-card');
   card.setConfig({ layout_entity: 'input_select.l', cameras });
   card.hass = hass;
@@ -98,13 +102,15 @@
 
   // Deck full screen keeps the grid
   click('.hbtn'); await tick();
-  results.deckFs = card.hasAttribute('fs') && root.querySelectorAll('.card.fs .tile').length === 2;
+  const made = created;
+  results.deckFs = card.hasAttribute('fs') && root.querySelectorAll('.card.fs .tile').length === 2
+    && card.parentNode === document.body && card.getBoundingClientRect().width === innerWidth;
   // Camera full screen entered from the deck goes back to the deck
   click('.cell .fsb[data-val="0"]'); await tick();
   click('.fsb'); await tick();
   results.backToDeck = card.hasAttribute('fs') && root.querySelectorAll('.card.fs .tile').length === 2;
   click('.hbtn'); await tick();
-  results.deckFsExit = !card.hasAttribute('fs') && !root.querySelector('.card.fs');
+  results.deckFsExit = !card.hasAttribute('fs') && !root.querySelector('.card.fs') && card.parentNode === box && created === made;
 
   // Real full screen (Android WebView): the CSS cover stays until the browser has left full screen,
   // then the page scroll is restored

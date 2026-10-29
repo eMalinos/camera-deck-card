@@ -268,6 +268,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   }
 
   connectedCallback() {
+    if (this._moving) return;
     document.addEventListener('visibilitychange', this._onVisibility);
     document.addEventListener('fullscreenchange', this._onFullscreen);
     document.addEventListener('click', this._onGesture, true);
@@ -278,6 +279,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   }
 
   disconnectedCallback() {
+    if (this._moving) return;
     document.removeEventListener('visibilitychange', this._onVisibility);
     document.removeEventListener('fullscreenchange', this._onFullscreen);
     document.removeEventListener('click', this._onGesture, true);
@@ -344,14 +346,16 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   }
 
   // The card itself goes full screen, so re-renders keep it there and players keep streaming.
-  // It covers the page with CSS right away (all iPhone gets: no element full screen there),
-  // then asks for real full screen, which some webviews never answer.
-  // ponytail: CSS cover is position:fixed, breaks under an ancestor with transform; add a body-level overlay if a dashboard needs it.
+  // It moves to <body> like a modal (position:fixed breaks under HA's transformed/contained
+  // ancestors) and covers the page with CSS right away (all iPhone gets: no element full
+  // screen there), then asks for real full screen, which some webviews never answer.
   _enterFs(mode, patch) {
     this._backToDeck = this._state.fs === 'deck';
     this._set({ ...patch, fs: mode });
     if (this.hasAttribute('fs')) return; // deck <-> camera
     this._scroll = [window.scrollX, window.scrollY];
+    this._home = document.createComment('camera-deck-card');
+    this._move(() => { this.replaceWith(this._home); document.body.appendChild(this); });
     this.setAttribute('fs', '');
     if (document.fullscreenEnabled) this.requestFullscreen?.().catch(() => {});
   }
@@ -368,10 +372,20 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     this._leaveFs();
   }
 
+  // Re-parent without the connect/disconnect side effects (players keep streaming).
+  _move(fn) {
+    this._moving = true;
+    fn();
+    this._moving = false;
+  }
+
   _leaveFs() {
     this._native = false;
     this.removeAttribute('fs');
     this._set({ fs: null });
+    // ponytail: the view was left while in full screen -> the card just closes; keep it alive if that ever matters.
+    if (this._home) this._move(() => (this._home.isConnected ? this._home.replaceWith(this) : this.remove()));
+    this._home = null;
     const [x, y] = this._scroll || [window.scrollX, window.scrollY];
     window.scrollTo(x, y);
     window.dispatchEvent(new Event('resize')); // relayout the dashboard for the restored viewport
