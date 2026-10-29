@@ -151,7 +151,7 @@ export const STYLE = `
 button{font-family:inherit;cursor:pointer}
 .head{display:flex;align-items:center;gap:10px;padding:2px 4px 0}
 .head h2{margin:0;flex:1;font-size:16px;font-weight:500}
-.page-label{font-size:12px;color:var(--secondary-text-color,#6b6b6b)}
+.page-label{font-size:12px;white-space:nowrap;color:var(--secondary-text-color,#6b6b6b)}
 .switch{display:flex;background:var(--secondary-background-color,#f0f0f0);border-radius:12px;padding:3px;gap:3px}
 .switch button{width:40px;height:36px;border:0;border-radius:10px;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--secondary-text-color,#616161)}
 .switch button[aria-checked="true"]{background:var(--card-background-color,#ffffff);color:var(--primary-text-color,#212121);box-shadow:0 1px 3px rgba(0,0,0,.12)}
@@ -189,8 +189,7 @@ button{font-family:inherit;cursor:pointer}
 .tile .badge{border-radius:8px;padding:3px 8px;font-size:10px}
 .tile .pill{border-radius:8px;padding:3px 8px;font-size:11px}
 .pager{position:relative;display:flex;align-items:center;justify-content:center;gap:12px}
-.pager .snd{position:absolute;left:0}
-.pager .snd[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
+.hact[aria-pressed="true"],.tools button[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
 .pill.snd{display:flex;padding:3px 6px}
 .pill.snd svg{width:14px;height:14px}
 .pager button{width:44px;height:44px;border-radius:50%;border:0;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121);display:flex;align-items:center;justify-content:center}
@@ -200,10 +199,9 @@ button{font-family:inherit;cursor:pointer}
 .tools{display:flex;align-items:center;gap:8px}
 .tools .sp{flex:1}
 .tools button{width:44px;height:40px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
-.tools button[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
 .fsb{position:absolute;right:10px;bottom:10px;width:36px;height:36px;border:0;border-radius:10px;background:rgba(0,0,0,.55);color:#ffffff;display:flex;align-items:center;justify-content:center}
 .cell .fsb{right:8px;bottom:8px;width:32px;height:32px}
-.hbtn{width:42px;height:42px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
+.hbtn,.hact{width:42px;height:42px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
 .card.fs{height:100%;box-sizing:border-box;border-radius:0}
 .fs .view{flex:1;min-height:0;aspect-ratio:auto}
 .fs .grid{flex:1;min-height:0;grid-auto-rows:minmax(0,1fr)}
@@ -455,7 +453,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _head(vm) {
     const btns = ['1', '2', '4'].map((id) =>
       `<button role="radio" aria-checked="${vm.layout === id}" aria-label="${LAYOUT_LABELS[id]}" data-act="layout" data-val="${id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${ICON_PATHS[id]}</svg></button>`).join('');
-    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span>${vm.cams.length > 1 ? `<div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div>` : ''}<button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
+    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span>${this._acts(vm, 'hact')}${vm.cams.length > 1 ? `<div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div>` : ''}<button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
   }
 
   // Top right row: LIVE / OFFLINE and the name (hidden on a narrow card), then `extra`.
@@ -492,18 +490,28 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
     return `<div class="view">${this._video(c, 44)}${this._top(c, `<span class="pos">${c.pos}</span>`)}${nav}${this._fsBtn(c.index, vm.fs === 'cam')}</div>`
-      + this._tools(c)
+      + this._tools(c, vm.fs === 'cam' ? this._acts(vm, '') : '')
       + (vm.fs === 'cam' || n === 1 ? '' : `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`);
   }
 
-  _tools(c) {
+  // Sound (and privacy in layout 1) for the heading, above the cameras.
+  _acts(vm, cls) {
+    if (!vm.isSingle) {
+      return `<button class="${cls}" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`;
+    }
+    const c = vm.cam;
     if (!c.online) return '';
-    const sound = `<button aria-pressed="${c.sound}" aria-label="${c.waiting ? 'Tap to turn sound on' : c.sound ? 'Mute' : 'Unmute'}" data-act="sound">${this._soundIcon(c)}</button>`;
     const privacy = c.privacy
-      ? `<button aria-pressed="${c.privacy.on}" aria-label="Privacy mode" data-act="toggle" data-val="${esc(c.privacy.entity)}">${TOOL_ICON(PRIVACY)}</button>`
+      ? `<button class="${cls}" aria-pressed="${c.privacy.on}" aria-label="Privacy mode" data-act="toggle" data-val="${esc(c.privacy.entity)}">${TOOL_ICON(PRIVACY)}</button>`
       : '';
+    return `<button class="${cls}" aria-pressed="${c.sound}" aria-label="${c.waiting ? 'Tap to turn sound on' : c.sound ? 'Mute' : 'Unmute'}" data-act="sound">${this._soundIcon(c)}</button>${privacy}`;
+  }
+
+  // PTZ under the camera; `acts` when the heading is hidden.
+  _tools(c, acts) {
+    if (!c.online) return '';
     const ptz = c.ptz.map((p) => `<button aria-label="${PTZ_LABELS[p.dir]}" data-act="press" data-val="${esc(p.entity)}">${CHEVRON(p.dir, 20)}</button>`).join('');
-    return `<div class="tools">${sound}${privacy}<span class="sp"></span>${ptz}</div>`;
+    return ptz || acts ? `<div class="tools">${acts}<span class="sp"></span>${ptz}</div>` : '';
   }
 
   _grid(vm) {
@@ -513,8 +521,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       return `<div class="cell"><button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._top(c, snd)}</button>${this._fsBtn(c.index, false)}</div>`;
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
-    const sound = `<button class="snd" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`;
-    return `<div class="grid n${vm.grid.length}">${tiles}</div><div class="pager">${sound}<button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
+    return `<div class="grid n${vm.grid.length}">${tiles}</div><div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
   }
 
   async _mountPlayers(vm) {

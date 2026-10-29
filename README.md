@@ -19,7 +19,7 @@ A camera card for Home Assistant dashboards. It shows one camera with a strip of
 - **Status**: with an `entity`, a camera whose entity is `unavailable` or `unknown` shows OFFLINE and no player.
 - **Whole frame**: video is never cropped, so the camera's own overlays (time stamp) stay visible.
 - **Playback mode**: a small label shows how the video plays (`RTC`, `MSE`, `HLS`).
-- **Sound**: per camera. In layout 1 the toolbar button, in the grid one button for every camera on the page; a tile with sound shows a speaker. `sound: true` turns it on when the card loads; a browser that blocks sound before the first tap plays the camera muted, and the first tap anywhere on the page turns the sound on.
+- **Sound**: per camera. The button in the heading: in layout 1 for the shown camera (next to privacy), in the grid for every camera on the page; a tile with sound shows a speaker. `sound: true` turns it on when the card loads; a browser that blocks sound before the first tap plays the camera muted, and the first tap anywhere on the page turns the sound on.
 - **Full screen**: the button in the heading shows the whole card full screen in its layout (two cameras side by side on a landscape screen, one above the other on a portrait one). The button on a camera shows only that camera with its toolbar. On iPhone, which has no full screen for page elements, the card covers the page instead.
 - **Overlays**: LIVE / OFFLINE and the camera name sit top right (cameras usually stamp the time top left) and are hidden on a card narrower than 500 px.
 - **Camera switch**: the picture slides left / right (off with the system's reduce-motion setting).
