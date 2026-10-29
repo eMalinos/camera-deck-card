@@ -84,9 +84,9 @@ export function controlsOf(hass, cam) {
 }
 
 export function viewModel(cfg, hass, state) {
-  const layout = state.forceSingle || state.fs === 'cam' ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
-  const isSingle = layout === '1';
   const n = cfg.cameras.length;
+  const layout = n === 1 || state.forceSingle || state.fs === 'cam' ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
+  const isSingle = layout === '1';
   const ci = wrap(state.cam || 0, n);
   const cams = cfg.cameras.map((c, i) => ({
     index: i, stream: c.stream, name: c.name, online: isOnline(hass, c.entity), selected: i === ci, sound: !!state.sound?.[c.stream],
@@ -455,7 +455,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _head(vm) {
     const btns = ['1', '2', '4'].map((id) =>
       `<button role="radio" aria-checked="${vm.layout === id}" aria-label="${LAYOUT_LABELS[id]}" data-act="layout" data-val="${id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${ICON_PATHS[id]}</svg></button>`).join('');
-    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span><div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div><button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
+    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span>${vm.cams.length > 1 ? `<div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div>` : ''}<button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
   }
 
   // Top right row: LIVE / OFFLINE and the name (hidden on a narrow card), then `extra`.
@@ -493,7 +493,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     }).join('');
     return `<div class="view">${this._video(c, 44)}${this._top(c, `<span class="pos">${c.pos}</span>`)}${nav}${this._fsBtn(c.index, vm.fs === 'cam')}</div>`
       + this._tools(c)
-      + (vm.fs === 'cam' ? '' : `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`);
+      + (vm.fs === 'cam' || n === 1 ? '' : `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`);
   }
 
   _tools(c) {
