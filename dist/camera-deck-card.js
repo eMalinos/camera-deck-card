@@ -283,7 +283,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     document.removeEventListener('click', this._onGesture, true);
     document.removeEventListener('touchend', this._onGesture, true);
     clearInterval(this._timer);
-    if (this._state.fs) this._exitFs(); // the browser leaves full screen with the element
+    if (this._state.fs) this._leaveFs(); // the browser leaves full screen with the element
   }
 
   _set(patch) {
@@ -351,15 +351,30 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     this._backToDeck = this._state.fs === 'deck';
     this._set({ ...patch, fs: mode });
     if (this.hasAttribute('fs')) return; // deck <-> camera
+    this._scroll = [window.scrollX, window.scrollY];
     this.setAttribute('fs', '');
     if (document.fullscreenEnabled) this.requestFullscreen?.().catch(() => {});
   }
 
+  // Leave real full screen first and drop the CSS cover only once the browser is back:
+  // Android WebView lays the page out for the full-screen viewport otherwise and stays
+  // scrolled off, with the rest of the dashboard black.
   _exitFs() {
+    if (document.fullscreenElement === this) {
+      this._native = true; // _onFullscreen finishes the exit
+      document.exitFullscreen().catch(() => this._leaveFs());
+      return;
+    }
+    this._leaveFs();
+  }
+
+  _leaveFs() {
     this._native = false;
     this.removeAttribute('fs');
-    if (document.fullscreenElement === this) document.exitFullscreen().catch(() => {});
     this._set({ fs: null });
+    const [x, y] = this._scroll || [window.scrollX, window.scrollY];
+    window.scrollTo(x, y);
+    window.dispatchEvent(new Event('resize')); // relayout the dashboard for the restored viewport
   }
 
   // Inside a user gesture: unmute the cameras whose sound the browser blocked.

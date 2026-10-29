@@ -106,6 +106,21 @@
   click('.hbtn'); await tick();
   results.deckFsExit = !card.hasAttribute('fs') && !root.querySelector('.card.fs');
 
+  // Real full screen (Android WebView): the CSS cover stays until the browser has left full screen,
+  // then the page scroll is restored
+  document.body.style.height = '3000px'; scrollTo(0, 500);
+  click('.hbtn'); await tick();
+  let fsEl = card;
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => fsEl });
+  document.exitFullscreen = () => Promise.resolve();
+  scrollTo(0, 0); // the full-screen viewport scrolled the page
+  click('.hbtn'); await tick();
+  results.nativeWaits = card.hasAttribute('fs');
+  fsEl = null; document.dispatchEvent(new Event('fullscreenchange')); await tick(100);
+  results.nativeExit = !card.hasAttribute('fs') && !root.querySelector('.card.fs') && scrollY === 500;
+  delete document.fullscreenElement; delete document.exitFullscreen;
+  document.body.style.height = ''; scrollTo(0, 0);
+
   // Narrow card (398 px): LIVE and name hidden, position still shown
   results.badgesHidden = getComputedStyle(root.querySelector('.badges')).display === 'none';
 
