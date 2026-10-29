@@ -104,6 +104,7 @@ test('viewModel grid pages are clamped and use 2 columns semantics', () => {
   assert.deepEqual(vm.pager.dots, [false, true]);
   const two = viewModel(cfg(5), hass({}), { layout: '2', cam: 0, page: 0 });
   assert.deepEqual(two.grid.map((g) => g.index), [0, 1]);
+  assert.equal(viewModel(cfg(2), hass({}), { layout: '2', cam: 0, page: 0 }).pager.label, ''); // one page: no label
 });
 
 test('viewModel forceSingle overrides the shared layout entity', () => {

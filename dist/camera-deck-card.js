@@ -101,7 +101,7 @@ export function viewModel(cfg, hass, state) {
     fs: state.fs || null,
     isSingle,
     pager: {
-      label: isSingle ? '' : `Page ${pg.page + 1} / ${pg.pages}`,
+      label: isSingle || pg.pages === 1 ? '' : `Page ${pg.page + 1} / ${pg.pages}`,
       pages: pg.pages,
       page: pg.page,
       dots: Array.from({ length: pg.pages }, (_, k) => k === pg.page),
@@ -521,7 +521,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       return `<div class="cell"><button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._top(c, snd)}</button>${this._fsBtn(c.index, false)}</div>`;
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
-    return `<div class="grid n${vm.grid.length}">${tiles}</div><div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>`;
+    return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`;
   }
 
   async _mountPlayers(vm) {
