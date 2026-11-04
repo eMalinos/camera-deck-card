@@ -23,6 +23,8 @@ test('normalizeConfig overlay: defaults, full override, unknown key, disallowed 
   assert.deepEqual(ov(all), all);
   for (const [k, list] of Object.entries(OVERLAY_ALLOWED)) for (const v of list) assert.equal(ov({ [k]: v })[k], v);
   assert.throws(() => ov({ nope: 'hidden' }), /unknown overlay key nope/);
+  assert.throws(() => ov({ constructor: 'hidden' }), /unknown overlay key constructor/);
+  assert.throws(() => ov({ toString: 'hidden' }), /unknown overlay key toString/);
   assert.throws(() => ov({ live: 'heading' }), /overlay\.live must be one of top-left, .*hidden/);
   assert.throws(() => ov({ ptz: 'heading' }), /overlay\.ptz must be one of/);
   assert.throws(() => ov({ mode: 'below' }), /overlay\.mode must be one of/);
@@ -63,14 +65,13 @@ test('posterPath and playerConfig encode the stream and never use entity', () =>
   assert.equal(playerConfig('a', true).muted, false);
   assert.match(p.style, /\.status\{display:none\}/);
   assert.doesNotMatch(p.style, /\.mode\{display:none/); // RTC / MSE label stays visible
-  assert.match(p.style, /\.header\{top:auto;bottom:8px;left:10px/); // bottom left, the full screen button is bottom right
+  assert.match(p.style, /bottom:var\(--mb,8px\);left:var\(--mx,10px\)/); // bottom left unless the card places it
 });
 
-test('playerConfig places the mode label from overlay.mode', () => {
+test('playerConfig hides the mode label only for overlay.mode hidden', () => {
   assert.equal(playerConfig('a', false, 'bottom-left').style, PLAYER_STYLE);
-  assert.match(playerConfig('a', false, 'top-center').style, /\.header\{top:8px;bottom:auto;left:50%;right:auto;transform:translateX\(-50%\)\}/);
-  assert.match(playerConfig('a', false, 'middle-right').style, /\.header\{top:50%;bottom:auto;left:auto;right:10px;transform:translateY\(-50%\)\}/);
-  assert.match(playerConfig('a', false, 'center').style, /transform:translateX\(-50%\) translateY\(-50%\)/);
+  assert.equal(playerConfig('a', false, 'top-center').style, PLAYER_STYLE); // placed by the card (--mx / --my)
+  assert.match(PLAYER_STYLE, /\.header\{top:var\(--my,auto\);bottom:var\(--mb,8px\);left:var\(--mx,10px\)/);
   assert.match(playerConfig('a', false, 'hidden').style, /\.mode\{display:none\}$/);
 });
 
@@ -153,7 +154,7 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
 });
 
 test('card badges hide on a narrow card wherever they are placed', () => {
-  assert.match(STYLE, /\.z-top-right,\.z-middle-right,\.z-bottom-right\{right:var\(--s\)\}/);
+  assert.match(STYLE, /\.z-top-right,\.z-middle-right\{right:var\(--s\)\}/);
   assert.match(STYLE, /@container \(max-width:500px\)\{\.bdg\{display:none\}\}/);
 });
 

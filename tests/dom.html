@@ -155,7 +155,6 @@
     && !!c2('.view .z-bottom-left [data-act="sound"]') && c2('.view .z-center .dpad').children.length === 4
     && !!c2('.view .z-bottom-right .fsb') && !c2('.head [data-act="sound"]') && !!c2('.head [data-act="toggle"]') && !c2('.tools');
   results.modeHidden = /\.mode\{display:none\}/.test(c2('.slot webrtc-camera').config.style);
-  results.navClear = getComputedStyle(c2('.view .z-bottom-left')).left === '10px' && c2('.view').classList.contains('multi');
   c2('.z-bottom-left [data-act="sound"]').click(); await tick();
   results.movedSound = c2('.slot webrtc-camera').video.muted === false && c2('.z-bottom-left [data-act="sound"]').getAttribute('aria-pressed') === 'true';
   c2('.z-center .dpad .up').click(); await tick();
@@ -172,7 +171,21 @@
   // Moving the mode label recreates the kept players with the new style
   const madeBefore = created;
   card2.setConfig({ overlay: { mode: 'top-center' }, cameras: [{ stream: 'q0' }, { stream: 'q1' }] }); await tick();
-  results.modeMoves = created > madeBefore && /top:8px/.test(c2('.slot webrtc-camera').config.style);
+  results.modeMoves = created > madeBefore && !/display:none\}$/.test(c2('.slot webrtc-camera').config.style);
+
+  // Mode label and controls share one row (placeholder reserved), and the middle zone clears prev / next
+  states['input_select.l2'] = { state: '1' };
+  card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'middle-left', mode: 'middle-left', fullscreen: 'middle-right' },
+    cameras: Array.from({ length: 3 }, (_, i) => ({ stream: 'q' + i, name: 'Moved ' + i })) });
+  card2.hass = { ...hass, states: { ...states } }; await tick(100);
+  const rc = (el) => el.getBoundingClientRect();
+  const prev = rc(c2('.nav.prev')), next = rc(c2('.nav.next')), ph = rc(c2('.z-middle-left .zph')), snd = rc(c2('.z-middle-left [data-act="sound"]'));
+  const vbox = rc(c2('.view')), slotStyle = c2('.view .slot').style;
+  results.navClear = prev.right <= rc(c2('.z-middle-left')).left && rc(c2('.z-middle-right')).right <= next.left;
+  results.modeFlows = ph.right <= snd.left || snd.right <= ph.left;
+  results.modePlaced = slotStyle.getPropertyValue('--mx') === Math.round(ph.left - vbox.left) + 'px' && slotStyle.getPropertyValue('--my') === Math.round(ph.top - vbox.top) + 'px';
+  card2.setConfig({ layout_entity: 'input_select.l2', cameras: [{ stream: 'q0' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  results.modeDefaultSpot = !!c2('.z-bottom-left .zph') && getComputedStyle(c2('.z-bottom-left')).left === '10px';
 
   // Screenshots
   const shot = q.get('shot');

@@ -33,14 +33,16 @@ export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'b
 
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), a small pill; the card draws its own overlays.
 // `contain` keeps the camera's own overlays (time) in view.
-const HEADER_DEFAULT = '.header{top:auto;bottom:8px;left:10px;right:auto}';
+// The label sits where the card reserved its place (`.zph` in the overlay zones, see _placeMode):
+// --mx / --my are set on the slot and inherited into the player; without them it is bottom left.
+const HEADER_DEFAULT = '.header{top:var(--my,auto);bottom:var(--mb,8px);left:var(--mx,10px);right:auto}';
 export const PLAYER_STYLE = '.status{display:none} ' + HEADER_DEFAULT + ' .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} .player{background:none} video{height:100%;object-fit:contain;pointer-events:none}';
 
 function normalizeOverlay(ov) {
   if (ov != null && (typeof ov !== 'object' || Array.isArray(ov))) throw new Error('camera-deck-card: overlay must be an object');
   const out = { ...OVERLAY_DEFAULTS };
   for (const [k, v] of Object.entries(ov || {})) {
-    if (!OVERLAY_ALLOWED[k]) throw new Error(`camera-deck-card: unknown overlay key ${k}`);
+    if (!Object.hasOwn(OVERLAY_ALLOWED, k)) throw new Error(`camera-deck-card: unknown overlay key ${k}`);
     if (v == null) continue;
     if (!OVERLAY_ALLOWED[k].includes(v)) throw new Error(`camera-deck-card: overlay.${k} must be one of ${OVERLAY_ALLOWED[k].join(', ')}`);
     out[k] = v;
@@ -91,26 +93,27 @@ export function posterPath(stream) {
   return '/api/webrtc/ws?poster=' + encodeURIComponent(stream);
 }
 
-// The mode label's place inside the player: webrtc-camera's `.header`, or gone when hidden.
-function modeStyle(pos) {
-  if (pos === 'hidden') return PLAYER_STYLE + ' .mode{display:none}';
-  if (pos === 'bottom-left') return PLAYER_STYLE;
-  const [v, h] = pos === 'center' ? ['middle', 'center'] : pos.split('-');
-  const top = v === 'top' ? 'top:8px;bottom:auto' : v === 'bottom' ? 'top:auto;bottom:8px' : 'top:50%;bottom:auto';
-  const left = h === 'left' ? 'left:10px;right:auto' : h === 'right' ? 'left:auto;right:10px' : 'left:50%;right:auto';
-  const move = [h === 'center' && 'translateX(-50%)', v === 'middle' && 'translateY(-50%)'].filter(Boolean).join(' ');
-  return PLAYER_STYLE.replace(HEADER_DEFAULT, `.header{${top};${left}${move ? ';transform:' + move : ''}}`);
-}
-
 export function playerConfig(stream, sound = false, mode = OVERLAY_DEFAULTS.mode) {
-  return { url: stream, muted: !sound, ui: false, intersection: 0.5, style: modeStyle(mode) };
+  return { url: stream, muted: !sound, ui: false, intersection: 0.5, style: mode === 'hidden' ? PLAYER_STYLE + ' .mode{display:none}' : PLAYER_STYLE };
 }
 
 // PTZ buttons and the privacy switch: from the config, else found on the camera entity's
 // device by entity id suffix (`button.*_move_up`, `switch.*_privacy`, as Tapo names them).
+// device_id -> entity ids, built once per `hass.entities` object (a grid asks for every tile on each update).
+const deviceEntities = new WeakMap();
+function entitiesOf(entities, dev) {
+  let map = deviceEntities.get(entities);
+  if (!map) {
+    map = new Map();
+    for (const e of Object.values(entities)) map.set(e.device_id, [...(map.get(e.device_id) || []), e.entity_id]);
+    deviceEntities.set(entities, map);
+  }
+  return map.get(dev) || [];
+}
+
 export function controlsOf(hass, cam) {
   const dev = cam.entity && hass?.entities?.[cam.entity]?.device_id;
-  const ids = dev ? Object.values(hass.entities).filter((e) => e.device_id === dev).map((e) => e.entity_id) : [];
+  const ids = dev ? entitiesOf(hass.entities, dev) : [];
   const find = (domain, suffix) => ids.find((id) => id.startsWith(domain + '.') && id.endsWith(suffix)) || null;
   const ptzMap = cam.ptz || Object.fromEntries(PTZ_DIRS.map((d) => [d, find('button', '_move_' + d)]));
   const privacy = cam.privacy || find('switch', '_privacy');
@@ -199,15 +202,18 @@ button{font-family:inherit;cursor:pointer}
 .slot>webrtc-camera{display:block;width:100%;height:100%}
 .out{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000000}
 .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:12px;color:rgba(255,255,255,.35)}
-.z{--t:12px;--b:10px;--s:12px;position:absolute;display:flex;gap:8px;align-items:center;pointer-events:none}
+.view{--t:12px;--b:10px;--s:12px;--sb:10px}
+.cell{--t:8px;--b:8px;--s:8px;--sb:8px}
+.z{position:absolute;display:flex;gap:8px;align-items:center;pointer-events:none}
 .z button{pointer-events:auto}
 .z-top-left,.z-top-center,.z-top-right{top:var(--t)}
-.z-bottom-left,.z-bottom-center,.z-bottom-right{bottom:var(--b);--s:10px}
+.z-bottom-left,.z-bottom-center,.z-bottom-right{bottom:var(--b)}
+.z-bottom-left{left:var(--sb)}.z-bottom-right{right:var(--sb)}
 .z-middle-left,.z-middle-right{top:50%;transform:translateY(-50%)}
 .z-center{top:50%;left:50%;transform:translate(-50%,-50%)}
 .z-top-center,.z-bottom-center{left:50%;transform:translateX(-50%)}
-.z-top-left,.z-middle-left,.z-bottom-left{left:var(--s)}
-.z-top-right,.z-middle-right,.z-bottom-right{right:var(--s)}
+.z-top-left,.z-middle-left{left:var(--s)}
+.z-top-right,.z-middle-right{right:var(--s)}
 .multi .z-middle-left{left:64px}.multi .z-middle-right{right:64px}
 @container (max-width:500px){.bdg{display:none}}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
@@ -231,7 +237,10 @@ button{font-family:inherit;cursor:pointer}
 .tile{position:relative;border:0;padding:0;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#2b3036}
 .tile.off{opacity:.6}
 .tile .slot{pointer-events:none}
-.cell .z{--t:8px;--b:8px;--s:8px;gap:6px}
+.cell .z{gap:6px}
+.zph{flex:none;width:40px;height:16px}
+.z-top-left .zph,.z-top-center .zph,.z-top-right .zph{align-self:flex-start}
+.z-bottom-left .zph,.z-bottom-center .zph,.z-bottom-right .zph{align-self:flex-end;margin-bottom:-2px}
 .cell .badge{border-radius:8px;padding:3px 8px;font-size:10px}
 .cell .pill{border-radius:8px;padding:3px 8px;font-size:11px}
 .tile.off~.z .bdg{opacity:.6}
@@ -282,7 +291,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     // Taps on this card's sound buttons unlock in _onClick.
     this._onGesture = (e) => {
       const path = e.composedPath();
-      if (Object.keys(this._state.blocked).length && !(path.includes(this) && path[0]?.closest?.('[data-act$="sound"],[data-act="sound-cam"]'))) this._unlockSound();
+      if (Object.keys(this._state.blocked).length && !(path.includes(this) && path[0]?.closest?.('[data-act*="sound"]'))) this._unlockSound();
     };
   }
 
@@ -328,6 +337,9 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     document.addEventListener('click', this._onGesture, true);
     document.addEventListener('touchend', this._onGesture, true); // iOS sends no click for taps on plain elements
     this._timer = setInterval(() => this._refreshThumbs(), THUMB_REFRESH_MS);
+    // The narrow-card rule hides badges and shifts the zones' rows.
+    this._resize = new ResizeObserver(() => this._placeMode());
+    this._resize.observe(this);
     this._refreshThumbs();
     requestAnimationFrame(() => this._quietPlayers()); // players connect after the card
   }
@@ -339,6 +351,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     document.removeEventListener('click', this._onGesture, true);
     document.removeEventListener('touchend', this._onGesture, true);
     clearInterval(this._timer);
+    this._resize?.disconnect();
     if (this._state.fs) this._leaveFs(); // the browser leaves full screen with the element
   }
 
@@ -472,6 +485,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     this._wasSingle = vm.isSingle;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card${vm.fs ? ' fs' : ''}">${vm.fs === 'cam' ? '' : this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
     this._mountPlayers(vm);
+    this._placeMode();
     if (!vm.isSingle) return;
     if (slide) this._slideIn(out, slide);
     const strip = this.shadowRoot.querySelector('.strip');
@@ -483,6 +497,22 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     }
     for (const img of strip.querySelectorAll('img')) img.addEventListener('error', () => this._thumbFailed(img));
     if (!wasSingle) this._refreshThumbs();
+  }
+
+  // The player's mode label can't flow with the card's controls: it is put where the card reserved
+  // its place (`.zph`), measured against the camera box and passed on as CSS variables.
+  _placeMode() {
+    for (const slot of this.shadowRoot.querySelectorAll('.slot')) {
+      const box = slot.closest('.view,.cell');
+      const ph = box.querySelector('.zph');
+      for (const k of ['--mx', '--my', '--mb']) slot.style.removeProperty(k);
+      if (!ph) continue;
+      const b = box.getBoundingClientRect();
+      const r = ph.getBoundingClientRect();
+      slot.style.setProperty('--mx', `${Math.round(r.left - b.left)}px`);
+      slot.style.setProperty('--my', `${Math.round(r.top - b.top)}px`);
+      slot.style.setProperty('--mb', 'auto');
+    }
   }
 
   // The last frame of the outgoing camera: its player leaves the DOM on the camera switch.
@@ -527,6 +557,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       { pos: o.live, html: `<span class="badge bdg${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span>` },
       { pos: o.name, html: `<span class="pill bdg">${esc(c.name)}</span>` },
       { pos: o.name === 'hidden' ? 'top-right' : o.name, html: tail },
+      { pos: o.mode, html: c.online && !this._missingPlayer ? '<span class="zph"></span>' : '' },
       { pos: o.sound, html: c.online ? this._sndBtn(c, 'zb', single ? 'sound' : 'sound-cam') : '' },
       { pos: o.privacy, html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
       { pos: o.ptz, html: single && c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
