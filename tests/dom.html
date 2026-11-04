@@ -22,15 +22,18 @@
 
   let ws = 0;
   const states = { 'input_select.l': { state: '1' } };
+  const calls = [];
   const hass = {
     states,
-    callService: async (d, s, data) => { states[data.entity_id] = { state: data.option }; },
+    callService: async (d, s, data) => { calls.push(d + '.' + s + ':' + data.entity_id); if (d === 'input_select') states[data.entity_id] = { state: data.option }; },
     callWS: async (msg) => { ws++; return { path: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' }; },
     hassUrl: (p) => p,
   };
   const cameras = Array.from({ length: 6 }, (_, i) => ({ stream: 's' + i, name: 'Camera ' + i }));
   const box = document.createElement('div');
-  box.style.width = '398px';
+  const q = new URLSearchParams(location.search); // ?w=<card width px>&shot=1|2|4|fs for screenshots
+  const width = Number(q.get('w') || 398);
+  box.style.width = width + 'px';
   box.style.transform = 'translateZ(0)'; // like HA's layout: traps position:fixed
   // Nested in a shadow root like in HA
   const host = document.createElement('div');
@@ -128,8 +131,71 @@
   delete document.fullscreenElement; delete document.exitFullscreen;
   document.body.style.height = ''; scrollTo(0, 0);
 
-  // Narrow card (398 px): LIVE and name hidden, position still shown
-  results.badgesHidden = getComputedStyle(root.querySelector('.badges')).display === 'none';
+  // Narrow card (< 500 px): LIVE and name hidden, position still shown
+  results.badgesHidden = (getComputedStyle(root.querySelector('.bdg')).display === 'none') === (width < 500);
+
+  // Second card: moved controls (sound bottom-left, live top-left, ptz centre, mode hidden)
+  Object.assign(states, { 'input_select.l2': { state: '1' }, 'switch.p': { state: 'off' } });
+  const box2 = document.createElement('div');
+  box2.style.cssText = `width:${width}px;margin-top:16px`;
+  document.body.appendChild(box2);
+  const card2 = document.createElement('camera-deck-card');
+  const ptz = { up: 'button.u', down: 'button.d', left: 'button.l', right: 'button.r' };
+  card2.setConfig({
+    layout_entity: 'input_select.l2',
+    overlay: { sound: 'bottom-left', live: 'top-left', ptz: 'center', mode: 'hidden' },
+    cameras: Array.from({ length: 3 }, (_, i) => ({ stream: 'q' + i, name: 'Moved ' + i, ptz, privacy: 'switch.p' })),
+  });
+  card2.hass = hass;
+  box2.appendChild(card2);
+  const root2 = card2.shadowRoot;
+  const c2 = (sel) => root2.querySelector(sel);
+  await tick();
+  results.movedSingle = !!c2('.view .z-top-left .badge') && !!c2('.view .z-top-right .pill') && !!c2('.view .z-top-right .pos')
+    && !!c2('.view .z-bottom-left [data-act="sound"]') && c2('.view .z-center .dpad').children.length === 4
+    && !!c2('.view .z-bottom-right .fsb') && !c2('.head [data-act="sound"]') && !!c2('.head [data-act="toggle"]') && !c2('.tools');
+  results.modeHidden = /\.mode\{display:none\}/.test(c2('.slot webrtc-camera').config.style);
+  c2('.z-bottom-left [data-act="sound"]').click(); await tick();
+  results.movedSound = c2('.slot webrtc-camera').video.muted === false && c2('.z-bottom-left [data-act="sound"]').getAttribute('aria-pressed') === 'true';
+  c2('.z-center .dpad .up').click(); await tick();
+  results.movedPtz = calls.includes('button.press:button.u');
+  states['input_select.l2'] = { state: '2' }; card2.hass = { ...hass, states: { ...states } }; await tick();
+  results.movedGrid = root2.querySelectorAll('.cell .z-top-left .badge').length === 2 && root2.querySelectorAll('.cell .z-bottom-left [data-act="sound-cam"]').length === 2
+    && !root2.querySelector('.head [data-act="grid-sound"]') && !root2.querySelector('.dpad') && !root2.querySelector('.pill.snd');
+  root2.querySelector('.cell [data-act="sound-cam"][data-val="1"]').click(); await tick();
+  results.gridCamSound = !root2.querySelectorAll('.slot webrtc-camera')[1].video.muted
+    && root2.querySelectorAll('.cell [data-act="sound-cam"]')[1].getAttribute('aria-pressed') === 'true'; // camera 0 had sound from the single view
+  c2('.cell .fsb[data-val="0"]').click(); await tick();
+  results.movedFs = card2.hasAttribute('fs') && !!c2('.view .z-bottom-left [data-act="sound"]') && !!c2('.view .z-center .dpad') && !c2('.head');
+  c2('.fsb').click(); await tick();
+  // Moving the mode label recreates the kept players with the new style
+  const madeBefore = created;
+  card2.setConfig({ overlay: { mode: 'top-center' }, cameras: [{ stream: 'q0' }, { stream: 'q1' }] }); await tick();
+  results.modeMoves = created > madeBefore && !/display:none\}$/.test(c2('.slot webrtc-camera').config.style);
+
+  // Mode label and controls share one row (placeholder reserved), and the middle zone clears prev / next
+  states['input_select.l2'] = { state: '1' };
+  card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'middle-left', mode: 'middle-left', fullscreen: 'middle-right' },
+    cameras: Array.from({ length: 3 }, (_, i) => ({ stream: 'q' + i, name: 'Moved ' + i })) });
+  card2.hass = { ...hass, states: { ...states } }; await tick(100);
+  const rc = (el) => el.getBoundingClientRect();
+  const prev = rc(c2('.nav.prev')), next = rc(c2('.nav.next')), ph = rc(c2('.z-middle-left .zph')), snd = rc(c2('.z-middle-left [data-act="sound"]'));
+  const vbox = rc(c2('.view')), slotStyle = c2('.view .slot').style;
+  results.navClear = prev.right <= rc(c2('.z-middle-left')).left && rc(c2('.z-middle-right')).right <= next.left;
+  results.modeFlows = ph.right <= snd.left || snd.right <= ph.left;
+  results.modePlaced = slotStyle.getPropertyValue('--mx') === Math.round(ph.left - vbox.left) + 'px' && slotStyle.getPropertyValue('--my') === Math.round(ph.top - vbox.top) + 'px';
+  card2.setConfig({ layout_entity: 'input_select.l2', cameras: [{ stream: 'q0' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  results.modeDefaultSpot = !!c2('.z-bottom-left .zph') && getComputedStyle(c2('.z-bottom-left')).left === '10px';
+
+  // Screenshots
+  const shot = q.get('shot');
+  if (shot) {
+    card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'bottom-left', live: 'top-left', ptz: 'center', mode: 'hidden' },
+      cameras: Array.from({ length: 3 }, (_, i) => ({ stream: 'q' + i, name: 'Moved ' + i, ptz, privacy: 'switch.p' })) });
+    states['input_select.l'] = { state: shot === 'fs' ? '1' : shot }; states['input_select.l2'] = { state: shot === 'fs' ? '1' : shot };
+    card.hass = { ...hass, states: { ...states } }; card2.hass = { ...hass, states: { ...states } }; await tick();
+    if (shot === 'fs') { root2.querySelector('.fsb').click(); await tick(); }
+  }
 
   const ok = Object.values(results).every(Boolean);
   document.getElementById('out').textContent = 'RESULT ' + (ok ? 'PASS ' : 'FAIL ') + JSON.stringify(results);

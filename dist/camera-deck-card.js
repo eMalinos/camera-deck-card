@@ -10,18 +10,45 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
 
 const PTZ_DIRS = ['left', 'up', 'down', 'right'];
 
-// Card badges sit top right: cameras usually stamp the time top left.
-// Keeps only webrtc-camera's mode label (RTC / MSE / HLS), as a small pill bottom left
-// (bottom right is the full screen button); the card draws its own overlays.
+// Where the on-camera controls sit (card option `overlay`). By default the badges are top right
+// (cameras usually stamp the time top left), the mode label bottom left, full screen bottom right.
+const PICTURE = ['top-left', 'top-center', 'top-right', 'middle-left', 'center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'];
+export const OVERLAY_ALLOWED = {
+  live: [...PICTURE, 'hidden'],
+  name: [...PICTURE, 'hidden'],
+  mode: [...PICTURE, 'hidden'],
+  fullscreen: [...PICTURE, 'below', 'hidden'],
+  ptz: [...PICTURE, 'below', 'hidden'],
+  sound: ['heading', ...PICTURE, 'below', 'hidden'],
+  privacy: ['heading', ...PICTURE, 'below', 'hidden'],
+};
+export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading' };
+
+// Keeps only webrtc-camera's mode label (RTC / MSE / HLS), a small pill; the card draws its own overlays.
 // `contain` keeps the camera's own overlays (time) in view.
-export const PLAYER_STYLE = '.status{display:none} .header{top:auto;bottom:8px;left:10px;right:auto} .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} .player{background:none} video{height:100%;object-fit:contain;pointer-events:none}';
+// The label sits where the card reserved its place (`.zph` in the overlay zones, see _placeMode):
+// --mx / --my are set on the slot and inherited into the player; without them it is bottom left.
+const HEADER_DEFAULT = '.header{top:var(--my,auto);bottom:var(--mb,8px);left:var(--mx,10px);right:auto}';
+export const PLAYER_STYLE = '.status{display:none} ' + HEADER_DEFAULT + ' .mode{opacity:1;pointer-events:none;background:rgba(0,0,0,.55);border-radius:8px;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:.04em} ha-card{background:none;border-radius:0;box-shadow:none} .player{background:none} video{height:100%;object-fit:contain;pointer-events:none}';
+
+function normalizeOverlay(ov) {
+  if (ov != null && (typeof ov !== 'object' || Array.isArray(ov))) throw new Error('camera-deck-card: overlay must be an object');
+  const out = { ...OVERLAY_DEFAULTS };
+  for (const [k, v] of Object.entries(ov || {})) {
+    if (!Object.hasOwn(OVERLAY_ALLOWED, k)) throw new Error(`camera-deck-card: unknown overlay key ${k}`);
+    if (v == null) continue;
+    if (!OVERLAY_ALLOWED[k].includes(v)) throw new Error(`camera-deck-card: overlay.${k} must be one of ${OVERLAY_ALLOWED[k].join(', ')}`);
+    out[k] = v;
+  }
+  return out;
+}
 
 export function normalizeConfig(config) {
   const cameras = config && config.cameras;
@@ -29,6 +56,7 @@ export function normalizeConfig(config) {
     throw new Error('camera-deck-card: cameras is required');
   }
   return {
+    overlay: normalizeOverlay(config.overlay),
     title: config.title ?? 'Cameras',
     layout_entity: config.layout_entity || null,
     cameras: cameras.map((c, i) => {
@@ -65,15 +93,27 @@ export function posterPath(stream) {
   return '/api/webrtc/ws?poster=' + encodeURIComponent(stream);
 }
 
-export function playerConfig(stream, sound = false) {
-  return { url: stream, muted: !sound, ui: false, intersection: 0.5, style: PLAYER_STYLE };
+export function playerConfig(stream, sound = false, mode = OVERLAY_DEFAULTS.mode) {
+  return { url: stream, muted: !sound, ui: false, intersection: 0.5, style: mode === 'hidden' ? PLAYER_STYLE + ' .mode{display:none}' : PLAYER_STYLE };
 }
 
 // PTZ buttons and the privacy switch: from the config, else found on the camera entity's
 // device by entity id suffix (`button.*_move_up`, `switch.*_privacy`, as Tapo names them).
+// device_id -> entity ids, built once per `hass.entities` object (a grid asks for every tile on each update).
+const deviceEntities = new WeakMap();
+function entitiesOf(entities, dev) {
+  let map = deviceEntities.get(entities);
+  if (!map) {
+    map = new Map();
+    for (const e of Object.values(entities)) map.set(e.device_id, [...(map.get(e.device_id) || []), e.entity_id]);
+    deviceEntities.set(entities, map);
+  }
+  return map.get(dev) || [];
+}
+
 export function controlsOf(hass, cam) {
   const dev = cam.entity && hass?.entities?.[cam.entity]?.device_id;
-  const ids = dev ? Object.values(hass.entities).filter((e) => e.device_id === dev).map((e) => e.entity_id) : [];
+  const ids = dev ? entitiesOf(hass.entities, dev) : [];
   const find = (domain, suffix) => ids.find((id) => id.startsWith(domain + '.') && id.endsWith(suffix)) || null;
   const ptzMap = cam.ptz || Object.fromEntries(PTZ_DIRS.map((d) => [d, find('button', '_move_' + d)]));
   const privacy = cam.privacy || find('switch', '_privacy');
@@ -94,7 +134,9 @@ export function viewModel(cfg, hass, state) {
     waiting: !!state.sound?.[c.stream] && !!state.blocked?.[c.stream],
   }));
   const pg = pageOf(n, isSingle ? 1 : Number(layout), state.page);
-  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => c);
+  // Grid tiles get the privacy switch only when it sits on the picture.
+  const tilePrivacy = PICTURE.includes(cfg.overlay.privacy);
+  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => ({ ...c, privacy: tilePrivacy ? controlsOf(hass, cfg.cameras[c.index]).privacy : null }));
   return {
     title: cfg.title,
     layout,
@@ -160,9 +202,20 @@ button{font-family:inherit;cursor:pointer}
 .slot>webrtc-camera{display:block;width:100%;height:100%}
 .out{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000000}
 .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:12px;color:rgba(255,255,255,.35)}
-.top{position:absolute;right:12px;top:12px;display:flex;gap:8px;align-items:center}
-.badges{display:flex;gap:8px;align-items:center}
-@container (max-width:500px){.badges{display:none}}
+.view{--t:12px;--b:10px;--s:12px;--sb:10px}
+.cell{--t:8px;--b:8px;--s:8px;--sb:8px}
+.z{position:absolute;display:flex;gap:8px;align-items:center;pointer-events:none}
+.z button{pointer-events:auto}
+.z-top-left,.z-top-center,.z-top-right{top:var(--t)}
+.z-bottom-left,.z-bottom-center,.z-bottom-right{bottom:var(--b)}
+.z-bottom-left{left:var(--sb)}.z-bottom-right{right:var(--sb)}
+.z-middle-left,.z-middle-right{top:50%;transform:translateY(-50%)}
+.z-center{top:50%;left:50%;transform:translate(-50%,-50%)}
+.z-top-center,.z-bottom-center{left:50%;transform:translateX(-50%)}
+.z-top-left,.z-middle-left{left:var(--s)}
+.z-top-right,.z-middle-right{right:var(--s)}
+.multi .z-middle-left{left:64px}.multi .z-middle-right{right:64px}
+@container (max-width:500px){.bdg{display:none}}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
 .badge.off{background:#616161}
 .pill{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px;font-weight:500}
@@ -184,10 +237,13 @@ button{font-family:inherit;cursor:pointer}
 .tile{position:relative;border:0;padding:0;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#2b3036}
 .tile.off{opacity:.6}
 .tile .slot{pointer-events:none}
-.tile .top{right:8px;top:8px;gap:6px}
-.tile .badges{gap:6px}
-.tile .badge{border-radius:8px;padding:3px 8px;font-size:10px}
-.tile .pill{border-radius:8px;padding:3px 8px;font-size:11px}
+.cell .z{gap:6px}
+.zph{flex:none;width:40px;height:16px}
+.z-top-left .zph,.z-top-center .zph,.z-top-right .zph{align-self:flex-start}
+.z-bottom-left .zph,.z-bottom-center .zph,.z-bottom-right .zph{align-self:flex-end;margin-bottom:-2px}
+.cell .badge{border-radius:8px;padding:3px 8px;font-size:10px}
+.cell .pill{border-radius:8px;padding:3px 8px;font-size:11px}
+.tile.off~.z .bdg{opacity:.6}
 .pager{position:relative;display:flex;align-items:center;justify-content:center;gap:12px}
 .hact[aria-pressed="true"],.tools button[aria-pressed="true"]{background:color-mix(in srgb,var(--primary-color,#0277bd) 16%,transparent);color:var(--primary-color,#0277bd)}
 .pill.snd{display:flex;padding:3px 6px}
@@ -199,8 +255,11 @@ button{font-family:inherit;cursor:pointer}
 .tools{display:flex;align-items:center;gap:8px}
 .tools .sp{flex:1}
 .tools button{width:44px;height:40px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
-.fsb{position:absolute;right:10px;bottom:10px;width:36px;height:36px;border:0;border-radius:10px;background:rgba(0,0,0,.55);color:#ffffff;display:flex;align-items:center;justify-content:center}
-.cell .fsb{right:8px;bottom:8px;width:32px;height:32px}
+.fsb,.zb{width:36px;height:36px;border:0;border-radius:10px;background:rgba(0,0,0,.55);color:#ffffff;display:flex;align-items:center;justify-content:center}
+.zb[aria-pressed="true"]{background:var(--primary-color,#0277bd)}
+.cell .fsb,.cell .zb{width:32px;height:32px}
+.dpad{display:grid;grid-template-columns:repeat(3,auto);gap:2px}
+.dpad .up{grid-area:1/2}.dpad .left{grid-area:2/1}.dpad .right{grid-area:2/3}.dpad .down{grid-area:3/2}
 .hbtn,.hact{width:42px;height:42px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
 .card.fs{height:100%;box-sizing:border-box;border-radius:0}
 .fs .view{flex:1;min-height:0;aspect-ratio:auto}
@@ -232,7 +291,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     // Taps on this card's sound buttons unlock in _onClick.
     this._onGesture = (e) => {
       const path = e.composedPath();
-      if (Object.keys(this._state.blocked).length && !(path.includes(this) && path[0]?.closest?.('[data-act$="sound"]'))) this._unlockSound();
+      if (Object.keys(this._state.blocked).length && !(path.includes(this) && path[0]?.closest?.('[data-act*="sound"]'))) this._unlockSound();
     };
   }
 
@@ -241,7 +300,13 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   }
 
   setConfig(config) {
+    const mode = this._cfg?.overlay.mode;
     this._cfg = normalizeConfig(config);
+    // webrtc-camera reads its style once, when it connects: a moved mode label needs fresh players.
+    if (mode && mode !== this._cfg.overlay.mode) {
+      for (const el of this._players.values()) el.remove();
+      this._players.clear();
+    }
     this._state.sound = Object.fromEntries(this._cfg.cameras.filter((c) => c.sound).map((c) => [c.stream, true]));
     this._state.blocked = {};
     this._vmKey = '';
@@ -272,6 +337,9 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     document.addEventListener('click', this._onGesture, true);
     document.addEventListener('touchend', this._onGesture, true); // iOS sends no click for taps on plain elements
     this._timer = setInterval(() => this._refreshThumbs(), THUMB_REFRESH_MS);
+    // The narrow-card rule hides badges and shifts the zones' rows.
+    this._resize = new ResizeObserver(() => this._placeMode());
+    this._resize.observe(this);
     this._refreshThumbs();
     requestAnimationFrame(() => this._quietPlayers()); // players connect after the card
   }
@@ -283,6 +351,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     document.removeEventListener('click', this._onGesture, true);
     document.removeEventListener('touchend', this._onGesture, true);
     clearInterval(this._timer);
+    this._resize?.disconnect();
     if (this._state.fs) this._leaveFs(); // the browser leaves full screen with the element
   }
 
@@ -322,6 +391,12 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         if (vm.cam.waiting) this._unlockSound();
         else this._set({ sound: { ...this._state.sound, [vm.cam.stream]: !vm.cam.sound }, blocked: {} });
         break;
+      case 'sound-cam': {
+        const c = vm.cams[Number(v)];
+        if (c.waiting) this._unlockSound();
+        else this._set({ sound: { ...this._state.sound, [c.stream]: !c.sound }, blocked: {} });
+        break;
+      }
       case 'grid-sound':
         if (vm.gridWaiting) this._unlockSound();
         else this._set({ sound: { ...this._state.sound, ...Object.fromEntries(vm.grid.map((c) => [c.stream, !vm.gridSound])) }, blocked: {} });
@@ -410,6 +485,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     this._wasSingle = vm.isSingle;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card${vm.fs ? ' fs' : ''}">${vm.fs === 'cam' ? '' : this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
     this._mountPlayers(vm);
+    this._placeMode();
     if (!vm.isSingle) return;
     if (slide) this._slideIn(out, slide);
     const strip = this.shadowRoot.querySelector('.strip');
@@ -421,6 +497,22 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     }
     for (const img of strip.querySelectorAll('img')) img.addEventListener('error', () => this._thumbFailed(img));
     if (!wasSingle) this._refreshThumbs();
+  }
+
+  // The player's mode label can't flow with the card's controls: it is put where the card reserved
+  // its place (`.zph`), measured against the camera box and passed on as CSS variables.
+  _placeMode() {
+    for (const slot of this.shadowRoot.querySelectorAll('.slot')) {
+      const box = slot.closest('.view,.cell');
+      const ph = box.querySelector('.zph');
+      for (const k of ['--mx', '--my', '--mb']) slot.style.removeProperty(k);
+      if (!ph) continue;
+      const b = box.getBoundingClientRect();
+      const r = ph.getBoundingClientRect();
+      slot.style.setProperty('--mx', `${Math.round(r.left - b.left)}px`);
+      slot.style.setProperty('--my', `${Math.round(r.top - b.top)}px`);
+      slot.style.setProperty('--mb', 'auto');
+    }
   }
 
   // The last frame of the outgoing camera: its player leaves the DOM on the camera switch.
@@ -456,13 +548,41 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span>${this._acts(vm, 'hact')}${vm.cams.length > 1 ? `<div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div>` : ''}<button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
   }
 
-  // Top right row: LIVE / OFFLINE and the name (hidden on a narrow card), then `extra`.
-  _top(c, extra) {
-    return `<span class="top"><span class="badges"><span class="badge${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span><span class="pill">${esc(c.name)}</span></span>${extra}</span>`;
+  // The picture controls of one camera in their zones. Items are in the table's order;
+  // `tail` (position pill / sound indicator) follows the name, or sits top right when the name is hidden.
+  _zones(c, vm, tail) {
+    const o = this._cfg.overlay;
+    const single = vm.isSingle;
+    const items = [
+      { pos: o.live, html: `<span class="badge bdg${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span>` },
+      { pos: o.name, html: `<span class="pill bdg">${esc(c.name)}</span>` },
+      { pos: o.name === 'hidden' ? 'top-right' : o.name, html: tail },
+      { pos: o.mode, html: c.online && !this._missingPlayer ? '<span class="zph"></span>' : '' },
+      { pos: o.sound, html: c.online ? this._sndBtn(c, 'zb', single ? 'sound' : 'sound-cam') : '' },
+      { pos: o.privacy, html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
+      { pos: o.ptz, html: single && c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
+      { pos: o.fullscreen, html: this._fsBtn(c.index, single && vm.fs === 'cam', 'fsb') },
+    ];
+    return PICTURE.map((p) => {
+      const html = items.filter((i) => i.pos === p).map((i) => i.html).join('');
+      return html ? `<span class="z z-${p}">${html}</span>` : '';
+    }).join('');
   }
 
-  _fsBtn(index, on) {
-    return `<button class="fsb" aria-label="${on ? 'Exit full screen' : 'Full screen'}" data-act="fs-cam" data-val="${index}">${TOOL_ICON(on ? FS_EXIT : FS)}</button>`;
+  _fsBtn(index, on, cls) {
+    return `<button${cls ? ` class="${cls}"` : ''} aria-label="${on ? 'Exit full screen' : 'Full screen'}" data-act="fs-cam" data-val="${index}">${TOOL_ICON(on ? FS_EXIT : FS)}</button>`;
+  }
+
+  _sndBtn(c, cls, act) {
+    return `<button class="${cls}" aria-pressed="${c.sound}" aria-label="${c.waiting ? 'Tap to turn sound on' : c.sound ? 'Mute' : 'Unmute'}" data-act="${act}" data-val="${c.index}">${this._soundIcon(c)}</button>`;
+  }
+
+  _privBtn(c, cls) {
+    return `<button class="${cls}" aria-pressed="${c.privacy.on}" aria-label="Privacy mode" data-act="toggle" data-val="${esc(c.privacy.entity)}">${TOOL_ICON(PRIVACY)}</button>`;
+  }
+
+  _ptzBtns(c, cls) {
+    return c.ptz.map((p) => `<button${cls ? ` class="${cls} ${p.dir}"` : ''} aria-label="${PTZ_LABELS[p.dir]}" data-act="press" data-val="${esc(p.entity)}">${CHEVRON(p.dir, 20)}</button>`).join('');
   }
 
   _soundIcon(c) {
@@ -489,36 +609,40 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       const img = src ? `<img alt="" src="${esc(src)}">` : `<span class="ph">${CAMERA_ICON(20, 1.5)}</span>`;
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
-    return `<div class="view">${this._video(c, 44)}${this._top(c, `<span class="pos">${c.pos}</span>`)}${nav}${this._fsBtn(c.index, vm.fs === 'cam')}</div>`
-      + this._tools(c, vm.fs === 'cam' ? this._acts(vm, '') : '')
+    return `<div class="view${n > 1 ? ' multi' : ''}">${this._video(c, 44)}${this._zones(c, vm, `<span class="pos">${c.pos}</span>`)}${nav}</div>`
+      + this._tools(vm, vm.fs === 'cam' ? this._acts(vm, '') : '')
       + (vm.fs === 'cam' || n === 1 ? '' : `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`);
   }
 
-  // Sound (and privacy in layout 1) for the heading, above the cameras.
+  // Sound (and privacy in layout 1) for the heading, above the cameras. The grid's page sound
+  // button stands in for a `below` sound too; a picture position puts a button on every tile.
   _acts(vm, cls) {
+    const o = this._cfg.overlay;
     if (!vm.isSingle) {
-      return `<button class="${cls}" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`;
+      return ['heading', 'below'].includes(o.sound)
+        ? `<button class="${cls}" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`
+        : '';
     }
     const c = vm.cam;
     if (!c.online) return '';
-    const privacy = c.privacy
-      ? `<button class="${cls}" aria-pressed="${c.privacy.on}" aria-label="Privacy mode" data-act="toggle" data-val="${esc(c.privacy.entity)}">${TOOL_ICON(PRIVACY)}</button>`
-      : '';
-    return `<button class="${cls}" aria-pressed="${c.sound}" aria-label="${c.waiting ? 'Tap to turn sound on' : c.sound ? 'Mute' : 'Unmute'}" data-act="sound">${this._soundIcon(c)}</button>${privacy}`;
+    return (o.sound === 'heading' ? this._sndBtn(c, cls, 'sound') : '') + (o.privacy === 'heading' && c.privacy ? this._privBtn(c, cls) : '');
   }
 
-  // PTZ under the camera; `acts` when the heading is hidden.
-  _tools(c, acts) {
-    if (!c.online) return '';
-    const ptz = c.ptz.map((p) => `<button aria-label="${PTZ_LABELS[p.dir]}" data-act="press" data-val="${esc(p.entity)}">${CHEVRON(p.dir, 20)}</button>`).join('');
-    return ptz || acts ? `<div class="tools">${acts}<span class="sp"></span>${ptz}</div>` : '';
+  // Under the camera: `below` controls, PTZ and `acts` (the heading's, when it is hidden).
+  _tools(vm, acts) {
+    const c = vm.cam;
+    const o = this._cfg.overlay;
+    const live = c.online;
+    const left = acts + (live && o.sound === 'below' ? this._sndBtn(c, '', 'sound') : '') + (live && o.privacy === 'below' && c.privacy ? this._privBtn(c, '') : '');
+    const right = (live && o.ptz === 'below' ? this._ptzBtns(c, '') : '') + (o.fullscreen === 'below' ? this._fsBtn(c.index, vm.fs === 'cam', '') : '');
+    return left || right ? `<div class="tools">${left}<span class="sp"></span>${right}</div>` : '';
   }
 
   _grid(vm) {
-    // The full screen button sits next to the tile: a button can't hold another button.
+    // The picture controls sit next to the tile: a button can't hold another button.
     const tiles = vm.grid.map((c) => {
-      const snd = c.online && c.sound ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
-      return `<div class="cell"><button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}${this._top(c, snd)}</button>${this._fsBtn(c.index, false)}</div>`;
+      const snd = c.online && c.sound && !PICTURE.includes(this._cfg.overlay.sound) ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
+      return `<div class="cell"><button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}</button>${this._zones(c, vm, snd)}</div>`;
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
     return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`;
@@ -551,7 +675,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       let el = this._players.get(stream);
       if (!el) {
         el = document.createElement('webrtc-camera');
-        el.setConfig(playerConfig(stream, this._wantsSound(stream)));
+        el.setConfig(playerConfig(stream, this._wantsSound(stream), this._cfg.overlay.mode));
         el.hass = this._hass;
         this._players.set(stream, el);
       }

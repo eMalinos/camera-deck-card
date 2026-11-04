@@ -1,18 +1,34 @@
 // Run: node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, PLAYER_STYLE, STYLE } from '../dist/camera-deck-card.js';
+import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, PLAYER_STYLE, STYLE, OVERLAY_DEFAULTS, OVERLAY_ALLOWED } from '../dist/camera-deck-card.js';
 
 const hass = (states) => ({ states: Object.fromEntries(Object.entries(states).map(([k, v]) => [k, { state: v }])) });
 const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) => ({ stream: `s${i}`, name: `Cam ${i}` })) });
 
 test('normalizeConfig fills defaults and rejects missing cameras/stream', () => {
   assert.deepEqual(normalizeConfig({ cameras: [{ stream: 'cam_entry' }] }),
-    { title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null, ptz: null, privacy: null, sound: false }] });
+    { overlay: OVERLAY_DEFAULTS, title: 'Cameras', layout_entity: null, cameras: [{ stream: 'cam_entry', name: 'cam_entry', entity: null, ptz: null, privacy: null, sound: false }] });
   assert.equal(normalizeConfig({ cameras: [{ stream: 'a', sound: true }] }).cameras[0].sound, true);
   assert.throws(() => normalizeConfig({}), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [] }), /cameras is required/);
   assert.throws(() => normalizeConfig({ cameras: [{ name: 'x' }] }), /cameras\[0\]\.stream is required/);
+});
+
+test('normalizeConfig overlay: defaults, full override, unknown key, disallowed value', () => {
+  const ov = (overlay) => normalizeConfig({ cameras: [{ stream: 'a' }], overlay }).overlay;
+  assert.deepEqual(ov(undefined), OVERLAY_DEFAULTS);
+  assert.deepEqual(ov({ sound: 'bottom-left' }), { ...OVERLAY_DEFAULTS, sound: 'bottom-left' });
+  const all = { live: 'top-left', name: 'hidden', mode: 'center', fullscreen: 'below', ptz: 'middle-right', sound: 'below', privacy: 'bottom-center' };
+  assert.deepEqual(ov(all), all);
+  for (const [k, list] of Object.entries(OVERLAY_ALLOWED)) for (const v of list) assert.equal(ov({ [k]: v })[k], v);
+  assert.throws(() => ov({ nope: 'hidden' }), /unknown overlay key nope/);
+  assert.throws(() => ov({ constructor: 'hidden' }), /unknown overlay key constructor/);
+  assert.throws(() => ov({ toString: 'hidden' }), /unknown overlay key toString/);
+  assert.throws(() => ov({ live: 'heading' }), /overlay\.live must be one of top-left, .*hidden/);
+  assert.throws(() => ov({ ptz: 'heading' }), /overlay\.ptz must be one of/);
+  assert.throws(() => ov({ mode: 'below' }), /overlay\.mode must be one of/);
+  assert.throws(() => ov('top-left'), /overlay must be an object/);
 });
 
 test('layoutOf prefers a valid entity state, then local, then 1', () => {
@@ -49,7 +65,14 @@ test('posterPath and playerConfig encode the stream and never use entity', () =>
   assert.equal(playerConfig('a', true).muted, false);
   assert.match(p.style, /\.status\{display:none\}/);
   assert.doesNotMatch(p.style, /\.mode\{display:none/); // RTC / MSE label stays visible
-  assert.match(p.style, /\.header\{top:auto;bottom:8px;left:10px/); // bottom left, the full screen button is bottom right
+  assert.match(p.style, /bottom:var\(--mb,8px\);left:var\(--mx,10px\)/); // bottom left unless the card places it
+});
+
+test('playerConfig hides the mode label only for overlay.mode hidden', () => {
+  assert.equal(playerConfig('a', false, 'bottom-left').style, PLAYER_STYLE);
+  assert.equal(playerConfig('a', false, 'top-center').style, PLAYER_STYLE); // placed by the card (--mx / --my)
+  assert.match(PLAYER_STYLE, /\.header\{top:var\(--my,auto\);bottom:var\(--mb,8px\);left:var\(--mx,10px\)/);
+  assert.match(playerConfig('a', false, 'hidden').style, /\.mode\{display:none\}$/);
 });
 
 test('player keeps the whole frame (camera time overlay is not cropped)', () => {
@@ -130,10 +153,18 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
   }
 });
 
-test('card badges sit top right (cameras stamp the time top left) and hide on a narrow card', () => {
-  assert.match(STYLE, /\.top\{position:absolute;right:12px;top:12px/);
-  assert.doesNotMatch(STYLE, /\.top\{[^}]*left:/);
-  assert.match(STYLE, /@container \(max-width:500px\)\{\.badges\{display:none\}\}/);
+test('card badges hide on a narrow card wherever they are placed', () => {
+  assert.match(STYLE, /\.z-top-right,\.z-middle-right\{right:var\(--s\)\}/);
+  assert.match(STYLE, /@container \(max-width:500px\)\{\.bdg\{display:none\}\}/);
+});
+
+test('viewModel gives grid cameras privacy only when it sits on the picture', () => {
+  const h = { states: {}, entities: { 'camera.a': { entity_id: 'camera.a', device_id: 'd' }, 'switch.a_privacy': { entity_id: 'switch.a_privacy', device_id: 'd' } } };
+  const mk = (privacy) => normalizeConfig({ overlay: privacy && { privacy }, cameras: [{ stream: 'a', entity: 'camera.a' }, { stream: 'b' }] });
+  const st = { layout: '2', cam: 0, page: 0 };
+  assert.deepEqual(viewModel(mk(), h, st).grid.map((g) => g.privacy), [null, null]);
+  assert.deepEqual(viewModel(mk('below'), h, st).grid.map((g) => g.privacy), [null, null]);
+  assert.deepEqual(viewModel(mk('top-left'), h, st).grid.map((g) => g.privacy), [{ entity: 'switch.a_privacy', on: false }, null]);
 });
 
 test('viewModel waiting: sound wanted but blocked by the browser', () => {
