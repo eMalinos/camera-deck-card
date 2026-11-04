@@ -21,7 +21,7 @@ A camera card for Home Assistant dashboards. It shows one camera with a strip of
 - **Playback mode**: a small label shows how the video plays (`RTC`, `MSE`, `HLS`).
 - **Sound**: per camera. The button in the heading: in layout 1 for the shown camera (next to privacy), in the grid for every camera on the page; a tile with sound shows a speaker. `sound: true` turns it on when the card loads; a browser that blocks sound before the first tap plays the camera muted, and the first tap anywhere on the page turns the sound on.
 - **Full screen**: the button in the heading shows the whole card full screen in its layout (two cameras side by side on a landscape screen, one above the other on a portrait one). The button on a camera shows only that camera with its toolbar. On iPhone, which has no full screen for page elements, the card covers the page instead.
-- **Overlays**: LIVE / OFFLINE and the camera name sit top right (cameras usually stamp the time top left) and are hidden on a card narrower than 500 px.
+- **Overlays**: LIVE / OFFLINE and the camera name sit top right (cameras usually stamp the time top left) and are hidden on a card narrower than 500 px, wherever you place them. The `overlay` option moves every on-camera control (see below).
 - **Camera switch**: the picture slides left / right (off with the system's reduce-motion setting).
 - **PTZ and privacy**: in layout 1, arrow buttons and a privacy toggle for cameras that have them. They are found on the camera entity's device (`button.*_move_left|up|down|right`, `switch.*_privacy`, as the Tapo integration names them) or set with `ptz` / `privacy`.
 - Follows your theme's card background and text colours.
@@ -53,6 +53,11 @@ cameras:
       right: button.bedroom_move_right
     privacy: switch.bedroom_privacy
     sound: true        # optional, start with sound
+overlay:               # optional, where the controls sit (the same for every camera)
+  live: top-left
+  sound: bottom-left
+  ptz: center
+  mode: hidden
 ```
 
 | Option | Required | Description |
@@ -66,6 +71,21 @@ cameras:
 | `cameras[].sound` | no | `true` to start the camera with sound (default `false`). |
 | `title` | no | Heading (default `Cameras`). |
 | `layout_entity` | no | `input_select` with options `1`, `2`, `4`. Without it the layout is per device. |
+| `overlay` | no | Where each control sits, for the whole card. Every key is optional, a missing key keeps its default. |
+
+### `overlay`
+
+| Key | Control | Default | Allowed |
+|---|---|---|---|
+| `live` | LIVE / OFFLINE badge | `top-right` | picture position, `hidden` |
+| `name` | camera name | `top-right` | picture position, `hidden` |
+| `mode` | playback mode label (`RTC` / `MSE` / `HLS`) | `bottom-left` | picture position, `hidden` |
+| `fullscreen` | full screen button of a camera | `bottom-right` | picture position, `below`, `hidden` |
+| `ptz` | PTZ buttons (layout 1 only; on the picture they form a small d-pad) | `below` | picture position, `below`, `hidden` |
+| `sound` | sound button | `heading` | `heading`, picture position, `below`, `hidden` |
+| `privacy` | privacy switch (layout 1; on grid tiles only at a picture position) | `heading` | `heading`, picture position, `below`, `hidden` |
+
+Picture positions: `top-left`, `top-center`, `top-right`, `middle-left`, `center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right`. `below` puts the control in the toolbar under the camera (layout 1); in a grid, a `below` sound button moves to the heading and a `below` full screen button is not shown. At a picture position sound and privacy get a button on the camera, on every tile in a grid. Controls in one position sit in one row in the order live, name, mode, sound, privacy, ptz, full screen. A wrong key or value makes the card show a configuration error.
 
 There is no visual editor yet.
 
