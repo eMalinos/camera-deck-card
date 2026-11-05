@@ -187,6 +187,14 @@
   card2.setConfig({ layout_entity: 'input_select.l2', cameras: [{ stream: 'q0' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
   results.modeDefaultSpot = !!c2('.z-bottom-left .zph') && getComputedStyle(c2('.z-bottom-left')).left === '10px';
 
+  // Under the camera, sides can be swapped: PTZ left, sound right (around the spacer)
+  card2.setConfig({ layout_entity: 'input_select.l2', overlay: { ptz: 'below-left', sound: 'below-right', fullscreen: 'below' },
+    cameras: [{ stream: 'q0', ptz }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  const tools = [...c2('.tools').children];
+  const sp = tools.findIndex((el) => el.classList.contains('sp'));
+  const at = (sel) => tools.findIndex((el) => el.matches(sel));
+  results.belowSides = sp > 0 && at('[data-act="press"]') < sp && at('[data-act="sound"]') > sp && at('[data-act="fs-cam"]') > sp;
+
   // Screenshots
   const shot = q.get('shot');
   if (shot) {

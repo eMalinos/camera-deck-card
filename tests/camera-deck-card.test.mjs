@@ -28,6 +28,8 @@ test('normalizeConfig overlay: defaults, full override, unknown key, disallowed 
   assert.throws(() => ov({ live: 'heading' }), /overlay\.live must be one of top-left, .*hidden/);
   assert.throws(() => ov({ ptz: 'heading' }), /overlay\.ptz must be one of/);
   assert.throws(() => ov({ mode: 'below' }), /overlay\.mode must be one of/);
+  assert.throws(() => ov({ mode: 'below-left' }), /overlay\.mode must be one of/);
+  assert.throws(() => ov({ ptz: 'below-center' }), /overlay\.ptz must be one of/);
   assert.throws(() => ov('top-left'), /overlay must be an object/);
 });
 
