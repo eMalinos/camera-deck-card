@@ -67,11 +67,11 @@
   const sel = root.querySelector('.thumb[aria-selected="true"]');
   results.selectedInView = sel.offsetLeft + sel.offsetWidth <= strip.scrollLeft + strip.clientWidth + 1 && strip.scrollLeft > 0;
 
-  // I3: switching grid -> single loads thumbnails right away
+  // I3: the grid has the camera picker too, so switching grid -> single keeps its thumbnails
   states['input_select.l'] = { state: '4' }; card.hass = { ...hass, states: { ...states } }; await tick();
   ws = 0;
   states['input_select.l'] = { state: '1' }; card.hass = { ...hass, states: { ...states } }; await tick(200);
-  results.thumbsOnSingle = ws > 0 && root.querySelectorAll('.thumb img').length === 6;
+  results.thumbsOnSingle = root.querySelectorAll('.thumb img').length === 6;
 
   // Sound: the heading toggle unmutes the single player; other cameras stay muted in the grid
   click('.head [data-act="sound"]'); await tick();
@@ -201,15 +201,16 @@
   const foot = [...c2('.foot').children];
   results.cardFsFoot = !c2('.head [data-act="fs"]') && foot.findIndex((el) => el.matches('[data-act="fs"]')) > foot.findIndex((el) => el.classList.contains('sp'));
 
-  // Grid: the same toolbar under every tile (sound left, full screen right by default when below)
+  // Grid: camera picker and the selected camera's toolbar under the grid, as in the single view
   states['input_select.l2'] = { state: '2' };
   card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'below', fullscreen: 'below-right' },
-    cameras: [{ stream: 'q0' }, { stream: 'q1' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
-  const cellTools = [...root2.querySelectorAll('.cell .tools')];
-  results.gridBelow = cellTools.length === 2 && cellTools.every((t) => !!t.querySelector('[data-act="sound-cam"]') && !!t.querySelector('[data-act="fs-cam"]'))
-    && !c2('.head [data-act="grid-sound"]');
-  cellTools[1].querySelector('[data-act="sound-cam"]').click(); await tick();
-  results.gridBelowSound = !root2.querySelectorAll('.slot webrtc-camera')[1].video.muted;
+    cameras: [{ stream: 'q0' }, { stream: 'q1' }, { stream: 'q2' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  results.gridStrip = root2.querySelectorAll('.strip .thumb').length === 3 && root2.querySelectorAll('.tools').length === 1
+    && !root2.querySelector('.cell .tools') && !c2('.head [data-act="grid-sound"]');
+  c2('.strip .thumb[data-val="2"]').click(); await tick();
+  results.gridPick = !!c2('.grid') && c2('.tile.sel')?.dataset.val === '2' && c2('.tools [data-act="fs-cam"]').dataset.val === '2';
+  c2('.tools [data-act="sound"]').click(); await tick();
+  results.gridPickSound = !c2('.slot[data-stream="q2"] webrtc-camera').video.muted;
   states['input_select.l2'] = { state: '1' };
 
   // Screenshots

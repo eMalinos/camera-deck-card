@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -151,14 +151,9 @@ export function viewModel(cfg, hass, state) {
     waiting: !!state.sound?.[c.stream] && !!state.blocked?.[c.stream],
   }));
   const pg = pageOf(n, isSingle ? 1 : Number(layout), state.page);
-  // Grid tiles get the privacy switch on the picture or under the tile, PTZ only under the tile.
-  const o = cfg.overlay;
-  const tilePrivacy = PICTURE.includes(o.privacy) || isBelow(o.privacy);
-  const tilePtz = isBelow(o.ptz);
-  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map(({ selected, ...c }) => {
-    const ctl = tilePrivacy || tilePtz ? controlsOf(hass, cfg.cameras[c.index]) : { ptz: [], privacy: null };
-    return { ...c, privacy: tilePrivacy ? ctl.privacy : null, ptz: tilePtz ? ctl.ptz : [] };
-  });
+  // Grid tiles get the privacy switch only on the picture; the toolbar under the grid is the selected camera's.
+  const tilePrivacy = PICTURE.includes(cfg.overlay.privacy);
+  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map((c) => ({ ...c, privacy: tilePrivacy ? controlsOf(hass, cfg.cameras[c.index]).privacy : null }));
   return {
     title: cfg.title,
     layout,
@@ -172,7 +167,7 @@ export function viewModel(cfg, hass, state) {
     },
     cam: {
       index: ci, stream: cams[ci].stream, name: cams[ci].name, online: cams[ci].online, pos: `${ci + 1} / ${n}`,
-      sound: cams[ci].sound, waiting: cams[ci].waiting, ...(isSingle ? controlsOf(hass, cfg.cameras[ci]) : { ptz: [], privacy: null }),
+      sound: cams[ci].sound, waiting: cams[ci].waiting, ...controlsOf(hass, cfg.cameras[ci]),
     },
     cams,
     grid,
@@ -257,9 +252,8 @@ button{font-family:inherit;cursor:pointer}
 .grid{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
 .cell{min-width:0;display:flex;flex-direction:column;gap:6px}
 .pic{position:relative}
-.cell .tools{gap:4px;flex-wrap:wrap}
+.tile.sel{outline:2px solid var(--primary-color,#0277bd);outline-offset:2px}
 .tools .tr:empty,.tools .tl:empty{display:none}
-.cell .tools button{width:34px;height:32px;border-radius:10px}
 .tile{position:relative;border:0;padding:0;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#2b3036}
 .tile.off{opacity:.6}
 .tile .slot{pointer-events:none}
@@ -409,7 +403,8 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         break;
       case 'pick':
         this._slide = Math.sign(Number(v) - vm.cam.index);
-        this._set({ cam: Number(v) });
+        // in a grid, also the page that shows the picked camera
+        this._set(vm.isSingle ? { cam: Number(v) } : { cam: Number(v), page: Math.floor(Number(v) / Number(vm.layout)) });
         break;
       case 'page':
         this._set({ page: wrap(vm.pager.page + Number(v), vm.pager.pages) });
@@ -511,22 +506,21 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     this._slide = 0;
     const out = slide ? this._snapshot(prev.cam.stream) : null;
     const scroll = this.shadowRoot.querySelector('.strip')?.scrollLeft || 0;
-    const wasSingle = this._wasSingle;
-    this._wasSingle = vm.isSingle;
+    const hadStrip = this._hadStrip;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card${vm.fs ? ' fs' : ''}">${vm.fs === 'cam' ? '' : this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}${vm.fs === 'cam' ? '' : this._foot(vm)}</div>`;
     this._mountPlayers(vm);
     this._placeMode();
-    if (!vm.isSingle) return;
     if (slide) this._slideIn(out, slide);
     const strip = this.shadowRoot.querySelector('.strip');
-    if (!strip) return; // camera full screen
+    this._hadStrip = !!strip;
+    if (!strip) return; // one camera, or camera full screen
     strip.scrollLeft = scroll;
     const sel = strip.querySelector('.thumb[aria-selected="true"]');
     if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) {
       strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
     }
     for (const img of strip.querySelectorAll('img')) img.addEventListener('error', () => this._thumbFailed(img));
-    if (!wasSingle) this._refreshThumbs();
+    if (!hadStrip) this._refreshThumbs();
   }
 
   // The player's mode label can't flow with the card's controls: it is put where the card reserved
@@ -646,14 +640,20 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     const nav = n > 1
       ? `<button class="nav prev" aria-label="Previous camera" data-act="cam" data-val="-1">${CHEVRON('prev', 20)}</button><button class="nav next" aria-label="Next camera" data-act="cam" data-val="1">${CHEVRON('next', 20)}</button>`
       : '';
+    return `<div class="view${n > 1 ? ' multi' : ''}">${this._video(c, 44)}${this._zones(c, vm, `<span class="pos">${c.pos}</span>`)}${nav}</div>`
+      + this._tools(c, vm, vm.fs === 'cam' ? this._acts(vm, '') : '')
+      + (vm.fs === 'cam' ? '' : this._strip(vm));
+  }
+
+  // The camera picker under the cameras (single view and grid); picking sets whose controls the toolbar shows.
+  _strip(vm) {
+    if (vm.cams.length === 1) return '';
     const thumbs = vm.cams.map((x) => {
       const src = x.online && this._thumbs.get(x.stream);
       const img = src ? `<img alt="" src="${esc(src)}">` : `<span class="ph">${CAMERA_ICON(20, 1.5)}</span>`;
       return `<button class="thumb${x.online ? '' : ' off'}" role="tab" aria-selected="${x.selected}" data-act="pick" data-val="${x.index}"><span class="img">${img}</span><span class="lbl"><span class="dot"></span>${esc(x.name)}</span></button>`;
     }).join('');
-    return `<div class="view${n > 1 ? ' multi' : ''}">${this._video(c, 44)}${this._zones(c, vm, `<span class="pos">${c.pos}</span>`)}${nav}</div>`
-      + this._tools(c, vm, vm.fs === 'cam' ? this._acts(vm, '') : '')
-      + (vm.fs === 'cam' || n === 1 ? '' : `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`);
+    return `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`;
   }
 
   // Sound (and privacy in layout 1) for the heading, above the cameras. In a grid a heading sound
@@ -671,13 +671,13 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     return o.order.filter((k) => btn[k] && o[k] === 'heading').map((k) => btn[k]()).join('');
   }
 
-  // Under a camera (the single view, or every grid tile): `below*` controls on their side,
+  // Under the camera (the single view) or the grid (the selected camera's): `below*` controls on their side,
   // and `acts` (the heading's, when it is hidden) first on the left.
   _tools(c, vm, acts) {
     const o = this._cfg.overlay;
     const live = c.online;
     const btn = {
-      sound: () => (live ? this._sndBtn(c, '', vm.isSingle ? 'sound' : 'sound-cam') : ''),
+      sound: () => (live ? this._sndBtn(c, '', 'sound') : ''),
       privacy: () => (live && c.privacy ? this._privBtn(c, '') : ''),
       ptz: () => (live && c.ptz.length ? `<span class="ptzg">${this._ptzBtns(c, '')}</span>` : ''),
       fullscreen: () => this._fsBtn(c.index, vm.fs === 'cam', ''),
@@ -692,12 +692,12 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _grid(vm) {
     // The picture controls sit next to the tile: a button can't hold another button.
     const tiles = vm.grid.map((c) => {
-      const so = this._cfg.overlay.sound;
-      const snd = c.online && c.sound && !PICTURE.includes(so) && !isBelow(so) ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
-      return `<div class="cell"><div class="pic"><button class="tile${c.online ? '' : ' off'}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}</button>${this._zones(c, vm, snd)}</div>${this._tools(c, vm, '')}</div>`;
+      const snd = c.online && c.sound && !PICTURE.includes(this._cfg.overlay.sound) ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
+      return `<div class="cell"><div class="pic"><button class="tile${c.online ? '' : ' off'}${c.selected ? ' sel' : ''}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}</button>${this._zones(c, vm, snd)}</div></div>`;
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
-    return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`;
+    return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`
+      + this._tools(vm.cam, vm, '') + this._strip(vm);
   }
 
   async _mountPlayers(vm) {
@@ -778,7 +778,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
 
   async _refreshThumbs() {
     if (!this._cfg || !this._hass || !this.isConnected || document.visibilityState !== 'visible') return;
-    if (!this._vm?.isSingle) return;
+    if (!this._vm) return;
     const online = this._vm.cams.filter((c) => c.online);
     const results = await Promise.allSettled(online.map((c) =>
       this._hass.callWS({ type: 'auth/sign_path', path: posterPath(c.stream), expires: 60 })
