@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -142,7 +142,7 @@ export function controlsOf(hass, cam) {
 
 export function viewModel(cfg, hass, state) {
   const n = cfg.cameras.length;
-  const layout = n === 1 || state.forceSingle || state.fs === 'cam' ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
+  const layout = n === 1 || state.fs === 'cam' ? '1' : layoutOf(hass, cfg.layout_entity, state.layout);
   const isSingle = layout === '1';
   const ci = wrap(state.cam || 0, n);
   const cams = cfg.cameras.map((c, i) => ({
@@ -296,12 +296,11 @@ button{font-family:inherit;cursor:pointer}
 class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   constructor() {
     super();
-    this._state = { layout: '1', cam: 0, page: 0, forceSingle: false, sound: {}, blocked: {}, fs: null };
+    this._state = { layout: '1', cam: 0, page: 0, sound: {}, blocked: {}, fs: null };
     this._players = new Map(); // stream -> webrtc-camera element
     this._watched = new WeakSet(); // videos with a volumechange listener
     this._thumbs = new Map(); // stream -> signed image URL
     this._vmKey = '';
-    this._layoutState = undefined;
     this._missingPlayer = false;
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.addEventListener('click', (e) => this._onClick(e));
@@ -339,9 +338,6 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
 
   set hass(hass) {
     this._hass = hass;
-    const ls = this._cfg?.layout_entity && hass.states?.[this._cfg.layout_entity]?.state;
-    if (this._layoutState !== undefined && ls !== this._layoutState) this._state.forceSingle = false;
-    this._layoutState = ls;
     for (const p of this._players.values()) p.hass = hass;
     this._render();
   }
@@ -395,7 +391,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         if (this._cfg.layout_entity) {
           this._hass.callService('input_select', 'select_option', { entity_id: this._cfg.layout_entity, option: v });
         }
-        this._set({ layout: v, page: 0, forceSingle: false });
+        this._set({ layout: v, page: 0 });
         break;
       case 'cam':
         this._slide = Number(v);
@@ -408,9 +404,6 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         break;
       case 'page':
         this._set({ page: wrap(vm.pager.page + Number(v), vm.pager.pages) });
-        break;
-      case 'open':
-        this._set({ layout: '1', cam: Number(v), forceSingle: true });
         break;
       case 'sound':
         if (vm.cam.waiting) this._unlockSound();
@@ -693,7 +686,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     // The picture controls sit next to the tile: a button can't hold another button.
     const tiles = vm.grid.map((c) => {
       const snd = c.online && c.sound && !PICTURE.includes(this._cfg.overlay.sound) ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
-      return `<div class="cell"><div class="pic"><button class="tile${c.online ? '' : ' off'}${c.selected ? ' sel' : ''}" aria-label="Open ${esc(c.name)}" data-act="open" data-val="${c.index}">${this._video(c, 32)}</button>${this._zones(c, vm, snd)}</div></div>`;
+      return `<div class="cell"><div class="pic"><button class="tile${c.online ? '' : ' off'}${c.selected ? ' sel' : ''}" aria-label="Pick ${esc(c.name)}" aria-pressed="${c.selected}" data-act="pick" data-val="${c.index}">${this._video(c, 32)}</button>${this._zones(c, vm, snd)}</div></div>`;
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
     return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`

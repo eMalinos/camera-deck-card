@@ -13,7 +13,7 @@ A camera card for Home Assistant dashboards. It shows one camera with a strip of
 ## Features
 
 - **Layout 1**: one camera with previous / next, the position (`2 / 5`) and a scrolling strip of thumbnails with a status dot.
-- **Layouts 2 and 4**: a two-column grid, 2 or 4 cameras per page, with page buttons, the toolbar of the picked camera and the same strip of thumbnails (picking one also turns to its page). Tap a camera to open it on its own.
+- **Layouts 2 and 4**: a two-column grid, 2 or 4 cameras per page, with page buttons, the toolbar of the picked camera and the same strip of thumbnails (picking one also turns to its page). Tapping a tile picks that camera too; layout 1 or its full screen button shows it on its own.
 - **Shared layout**: with `layout_entity` (an `input_select` with options `1`, `2`, `4`) every device follows the same layout.
 - **Light on the cameras**: only the cameras you can see stream. Thumbnails are go2rtc frames, refreshed every 10 s while the card is visible, so they reuse go2rtc's connection to the camera.
 - **Status**: with an `entity`, a camera whose entity is `unavailable` or `unknown` shows OFFLINE and no player.
