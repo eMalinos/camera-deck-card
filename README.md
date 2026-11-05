@@ -84,8 +84,10 @@ overlay:               # optional, where the controls sit (the same for every ca
 | `ptz` | PTZ buttons (layout 1 only; on the picture they form a small d-pad) | `below` | picture position, `below`, `below-left`, `below-right`, `hidden` |
 | `sound` | sound button | `heading` | `heading`, picture position, `below`, `below-left`, `below-right`, `hidden` |
 | `privacy` | privacy switch (layout 1; on grid tiles only at a picture position) | `heading` | `heading`, picture position, `below`, `below-left`, `below-right`, `hidden` |
+| `card_fullscreen` | full screen button of the whole card | `heading` | `heading`, `footer-left`, `footer-right` (a row under the card), `hidden` |
+| `order` | order of controls that share a position, e.g. `[fullscreen, sound]` | live, name, mode, sound, privacy, ptz, fullscreen, card_fullscreen | a list of distinct keys above; the ones left out follow in the default order |
 
-Picture positions: `top-left`, `top-center`, `top-right`, `middle-left`, `center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right`. `below-left` / `below-right` put the control in the toolbar under the camera (layout 1), on that side; plain `below` keeps the control's own side (sound and privacy left, PTZ and full screen right). In a grid, a sound button under the camera moves to the heading and a full screen button under the camera is not shown. At a picture position sound and privacy get a button on the camera, on every tile in a grid. Controls in one position sit in one row in the order live, name, mode, sound, privacy, ptz, full screen. A wrong key or value makes the card show a configuration error.
+Picture positions: `top-left`, `top-center`, `top-right`, `middle-left`, `center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right`. `below-left` / `below-right` put the control in the toolbar under the camera (layout 1), on that side; plain `below` keeps the control's own side (sound and privacy left, PTZ and full screen right). In a grid, a sound button under the camera moves to the heading and a full screen button under the camera is not shown. At a picture position sound and privacy get a button on the camera, on every tile in a grid. Controls in one position sit in one row in `order`. A wrong key or value makes the card show a configuration error.
 
 There is no visual editor yet.
 

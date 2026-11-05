@@ -1,7 +1,7 @@
 // Run: node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, PLAYER_STYLE, STYLE, OVERLAY_DEFAULTS, OVERLAY_ALLOWED } from '../dist/camera-deck-card.js';
+import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, PLAYER_STYLE, STYLE, OVERLAY_DEFAULTS, OVERLAY_ALLOWED, OVERLAY_ORDER } from '../dist/camera-deck-card.js';
 
 const hass = (states) => ({ states: Object.fromEntries(Object.entries(states).map(([k, v]) => [k, { state: v }])) });
 const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) => ({ stream: `s${i}`, name: `Cam ${i}` })) });
@@ -20,7 +20,7 @@ test('normalizeConfig overlay: defaults, full override, unknown key, disallowed 
   assert.deepEqual(ov(undefined), OVERLAY_DEFAULTS);
   assert.deepEqual(ov({ sound: 'bottom-left' }), { ...OVERLAY_DEFAULTS, sound: 'bottom-left' });
   const all = { live: 'top-left', name: 'hidden', mode: 'center', fullscreen: 'below', ptz: 'middle-right', sound: 'below', privacy: 'bottom-center' };
-  assert.deepEqual(ov(all), all);
+  assert.deepEqual(ov(all), { ...OVERLAY_DEFAULTS, ...all });
   for (const [k, list] of Object.entries(OVERLAY_ALLOWED)) for (const v of list) assert.equal(ov({ [k]: v })[k], v);
   assert.throws(() => ov({ nope: 'hidden' }), /unknown overlay key nope/);
   assert.throws(() => ov({ constructor: 'hidden' }), /unknown overlay key constructor/);
@@ -31,6 +31,15 @@ test('normalizeConfig overlay: defaults, full override, unknown key, disallowed 
   assert.throws(() => ov({ mode: 'below-left' }), /overlay\.mode must be one of/);
   assert.throws(() => ov({ ptz: 'below-center' }), /overlay\.ptz must be one of/);
   assert.throws(() => ov('top-left'), /overlay must be an object/);
+  // card full screen: heading or under the card
+  assert.equal(ov({ card_fullscreen: 'footer-right' }).card_fullscreen, 'footer-right');
+  assert.throws(() => ov({ card_fullscreen: 'top-left' }), /overlay\.card_fullscreen must be one of/);
+  // order: the listed controls first, the rest after them in the default order
+  assert.deepEqual(ov({ order: ['ptz', 'sound'] }).order, ['ptz', 'sound', ...OVERLAY_ORDER.filter((c) => c !== 'ptz' && c !== 'sound')]);
+  assert.deepEqual(ov({ order: null }).order, OVERLAY_ORDER);
+  assert.throws(() => ov({ order: ['ptz', 'ptz'] }), /overlay\.order must be a list/);
+  assert.throws(() => ov({ order: ['nope'] }), /overlay\.order must be a list/);
+  assert.throws(() => ov({ order: 'ptz' }), /overlay\.order must be a list/);
 });
 
 test('layoutOf prefers a valid entity state, then local, then 1', () => {
