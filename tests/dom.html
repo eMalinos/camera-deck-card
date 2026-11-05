@@ -191,10 +191,7 @@
   // Under the camera, sides can be swapped: PTZ left, sound right (around the spacer)
   card2.setConfig({ layout_entity: 'input_select.l2', overlay: { ptz: 'below-left', sound: 'below-right', fullscreen: 'below' },
     cameras: [{ stream: 'q0', ptz }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
-  const tools = [...c2('.tools').children];
-  const sp = tools.findIndex((el) => el.classList.contains('sp'));
-  const at = (sel) => tools.findIndex((el) => el.matches(sel));
-  results.belowSides = sp > 0 && at('[data-act="press"]') < sp && at('[data-act="sound"]') > sp && at('[data-act="fs-cam"]') > sp;
+  results.belowSides = !!c2('.tools .tl [data-act="press"]') && !!c2('.tools .tr [data-act="sound"]') && !!c2('.tools .tr [data-act="fs-cam"]');
 
   // Order inside one position, and the card's full screen under the card
   card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'bottom-left', fullscreen: 'bottom-left', order: ['fullscreen'], card_fullscreen: 'footer-right' },
@@ -203,6 +200,17 @@
   results.orderInZone = bl.findIndex((el) => el.matches('[data-act="fs-cam"]')) < bl.findIndex((el) => el.matches('[data-act="sound"]'));
   const foot = [...c2('.foot').children];
   results.cardFsFoot = !c2('.head [data-act="fs"]') && foot.findIndex((el) => el.matches('[data-act="fs"]')) > foot.findIndex((el) => el.classList.contains('sp'));
+
+  // Grid: the same toolbar under every tile (sound left, full screen right by default when below)
+  states['input_select.l2'] = { state: '2' };
+  card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'below', fullscreen: 'below-right' },
+    cameras: [{ stream: 'q0' }, { stream: 'q1' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  const cellTools = [...root2.querySelectorAll('.cell .tools')];
+  results.gridBelow = cellTools.length === 2 && cellTools.every((t) => !!t.querySelector('[data-act="sound-cam"]') && !!t.querySelector('[data-act="fs-cam"]'))
+    && !c2('.head [data-act="grid-sound"]');
+  cellTools[1].querySelector('[data-act="sound-cam"]').click(); await tick();
+  results.gridBelowSound = !root2.querySelectorAll('.slot webrtc-camera')[1].video.muted;
+  states['input_select.l2'] = { state: '1' };
 
   // Screenshots
   const shot = q.get('shot');
