@@ -166,7 +166,7 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
 
 test('card badges hide on a narrow card wherever they are placed', () => {
   assert.match(STYLE, /\.z-top-right,\.z-middle-right\{right:var\(--s\)\}/);
-  assert.match(STYLE, /@container \(max-width:500px\)\{\.bdg\{display:none\}\}/);
+  assert.match(STYLE, /@container \(max-width:500px\)\{\.grid \.bdg\{display:none\}\}/);
 });
 
 test('viewModel gives grid cameras privacy only when it sits on the picture', () => {

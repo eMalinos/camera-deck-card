@@ -131,8 +131,8 @@
   delete document.fullscreenElement; delete document.exitFullscreen;
   document.body.style.height = ''; scrollTo(0, 0);
 
-  // Narrow card (< 500 px): LIVE and name hidden, position still shown
-  results.badgesHidden = (getComputedStyle(root.querySelector('.bdg')).display === 'none') === (width < 500);
+  // Narrow card (< 500 px): LIVE and name hidden on grid tiles only, position still shown
+  results.badgesHidden = (getComputedStyle(root.querySelector('.bdg')).display === 'none') === (!!root.querySelector('.grid') && width < 500);
 
   // Second card: moved controls (sound bottom-left, live top-left, ptz centre, mode hidden)
   Object.assign(states, { 'input_select.l2': { state: '1' }, 'switch.p': { state: 'off' } });
@@ -154,6 +154,7 @@
   results.movedSingle = !!c2('.view .z-top-left .badge') && !!c2('.view .z-top-right .pill') && !!c2('.view .z-top-right .pos')
     && !!c2('.view .z-bottom-left [data-act="sound"]') && c2('.view .z-center .dpad').children.length === 4
     && !!c2('.view .z-bottom-right .fsb') && !c2('.head [data-act="sound"]') && !!c2('.head [data-act="toggle"]') && !c2('.tools');
+  results.singleBadges = getComputedStyle(c2('.view .bdg')).display !== 'none'; // one camera: shown at any width
   results.modeHidden = /\.mode\{display:none\}/.test(c2('.slot webrtc-camera').config.style);
   c2('.z-bottom-left [data-act="sound"]').click(); await tick();
   results.movedSound = c2('.slot webrtc-camera').video.muted === false && c2('.z-bottom-left [data-act="sound"]').getAttribute('aria-pressed') === 'true';

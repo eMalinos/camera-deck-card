@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -232,7 +232,7 @@ button{font-family:inherit;cursor:pointer}
 .z-top-left,.z-middle-left{left:var(--s)}
 .z-top-right,.z-middle-right{right:var(--s)}
 .multi .z-middle-left{left:64px}.multi .z-middle-right{right:64px}
-@container (max-width:500px){.bdg{display:none}}
+@container (max-width:500px){.grid .bdg{display:none}}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
 .badge.off{background:#616161}
 .pill{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px;font-weight:500}
