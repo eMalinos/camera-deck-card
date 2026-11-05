@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -20,15 +20,20 @@ const PTZ_DIRS = ['left', 'up', 'down', 'right'];
 // Where the on-camera controls sit (card option `overlay`). By default the badges are top right
 // (cameras usually stamp the time top left), the mode label bottom left, full screen bottom right.
 const PICTURE = ['top-left', 'top-center', 'top-right', 'middle-left', 'center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'];
+// Under the camera: `below-left` / `below-right`; plain `below` keeps each control's side
+// (sound and privacy left, PTZ and full screen right).
+const BELOW = ['below', 'below-left', 'below-right'];
 export const OVERLAY_ALLOWED = {
   live: [...PICTURE, 'hidden'],
   name: [...PICTURE, 'hidden'],
   mode: [...PICTURE, 'hidden'],
-  fullscreen: [...PICTURE, 'below', 'hidden'],
-  ptz: [...PICTURE, 'below', 'hidden'],
-  sound: ['heading', ...PICTURE, 'below', 'hidden'],
-  privacy: ['heading', ...PICTURE, 'below', 'hidden'],
+  fullscreen: [...PICTURE, ...BELOW, 'hidden'],
+  ptz: [...PICTURE, ...BELOW, 'hidden'],
+  sound: ['heading', ...PICTURE, ...BELOW, 'hidden'],
+  privacy: ['heading', ...PICTURE, ...BELOW, 'hidden'],
 };
+const isBelow = (v) => BELOW.includes(v);
+const belowSide = (key, v) => (v === 'below' ? (key === 'sound' || key === 'privacy' ? 'left' : 'right') : v.slice(6));
 export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading' };
 
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), a small pill; the card draws its own overlays.
@@ -615,11 +620,11 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   }
 
   // Sound (and privacy in layout 1) for the heading, above the cameras. The grid's page sound
-  // button stands in for a `below` sound too; a picture position puts a button on every tile.
+  // button stands in for a `below*` sound too; a picture position puts a button on every tile.
   _acts(vm, cls) {
     const o = this._cfg.overlay;
     if (!vm.isSingle) {
-      return ['heading', 'below'].includes(o.sound)
+      return o.sound === 'heading' || isBelow(o.sound)
         ? `<button class="${cls}" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`
         : '';
     }
@@ -628,13 +633,20 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     return (o.sound === 'heading' ? this._sndBtn(c, cls, 'sound') : '') + (o.privacy === 'heading' && c.privacy ? this._privBtn(c, cls) : '');
   }
 
-  // Under the camera: `below` controls, PTZ and `acts` (the heading's, when it is hidden).
+  // Under the camera: `below*` controls on their side, and `acts` (the heading's, when it is hidden) first on the left.
   _tools(vm, acts) {
     const c = vm.cam;
     const o = this._cfg.overlay;
     const live = c.online;
-    const left = acts + (live && o.sound === 'below' ? this._sndBtn(c, '', 'sound') : '') + (live && o.privacy === 'below' && c.privacy ? this._privBtn(c, '') : '');
-    const right = (live && o.ptz === 'below' ? this._ptzBtns(c, '') : '') + (o.fullscreen === 'below' ? this._fsBtn(c.index, vm.fs === 'cam', '') : '');
+    const btn = {
+      sound: () => (live ? this._sndBtn(c, '', 'sound') : ''),
+      privacy: () => (live && c.privacy ? this._privBtn(c, '') : ''),
+      ptz: () => (live ? this._ptzBtns(c, '') : ''),
+      fullscreen: () => this._fsBtn(c.index, vm.fs === 'cam', ''),
+    };
+    const side = (s) => Object.keys(btn).filter((k) => isBelow(o[k]) && belowSide(k, o[k]) === s).map((k) => btn[k]()).join('');
+    const left = acts + side('left');
+    const right = side('right');
     return left || right ? `<div class="tools">${left}<span class="sp"></span>${right}</div>` : '';
   }
 
