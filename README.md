@@ -23,7 +23,7 @@ A camera card for Home Assistant dashboards. It shows one camera with a strip of
 - **Full screen**: the button in the heading shows the whole card full screen in its layout (two cameras side by side on a landscape screen, one above the other on a portrait one). The button on a camera shows only that camera with its toolbar. On iPhone, which has no full screen for page elements, the card covers the page instead.
 - **Overlays**: LIVE / OFFLINE and the camera name sit top right (cameras usually stamp the time top left) and are hidden on grid tiles of a card narrower than 500 px, wherever you place them (a single camera always shows them). The `overlay` option moves every on-camera control (see below).
 - **Camera switch**: the picture slides left / right (off with the system's reduce-motion setting).
-- **PTZ and privacy**: in layout 1, arrow buttons and a privacy toggle for cameras that have them. They are found on the camera entity's device (`button.*_move_left|up|down|right`, `switch.*_privacy`, as the Tapo integration names them) or set with `ptz` / `privacy`.
+- **PTZ and privacy**: arrow buttons and a privacy toggle for cameras that have them, for the single camera or, in a grid, for the picked one. They are found on the camera entity's device (`button.*_move_left|up|down|right`, `switch.*_privacy`, as the Tapo integration names them) or set with `ptz` / `privacy`.
 - Follows your theme's card background and text colours.
 
 ## Requirements
