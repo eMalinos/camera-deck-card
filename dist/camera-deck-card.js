@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -33,12 +33,14 @@ export const OVERLAY_ALLOWED = {
   privacy: ['heading', ...PICTURE, ...BELOW, 'hidden'],
   // The whole card full screen: in the heading, or in a row under the card.
   card_fullscreen: ['heading', 'footer-left', 'footer-right', 'hidden'],
+  // The thumbnail strip: under a single camera and the grid, or only under a single camera.
+  thumbs: ['always', 'single'],
 };
 // `overlay.order`: the order of controls that share a position; the ones it leaves out follow in this order.
 export const OVERLAY_ORDER = ['live', 'name', 'mode', 'sound', 'privacy', 'ptz', 'fullscreen', 'card_fullscreen'];
 const isBelow = (v) => BELOW.includes(v);
 const belowSide = (key, v) => (v === 'below' ? (key === 'sound' || key === 'privacy' ? 'left' : 'right') : v.slice(6));
-export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading', card_fullscreen: 'heading', order: OVERLAY_ORDER };
+export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading', card_fullscreen: 'heading', thumbs: 'always', order: OVERLAY_ORDER };
 
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), a small pill; the card draws its own overlays.
 // `contain` keeps the camera's own overlays (time) in view.
@@ -690,7 +692,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
     return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`
-      + this._tools(vm.cam, vm, '') + this._strip(vm);
+      + this._tools(vm.cam, vm, '') + (this._cfg.overlay.thumbs === 'always' ? this._strip(vm) : '');
   }
 
   async _mountPlayers(vm) {

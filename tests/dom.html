@@ -214,7 +214,11 @@
   c2('.pager [data-act="page"][data-val="-1"]').click(); await tick(); // back to the page with cameras 0 and 1
   c2('.tile[data-val="0"]').click(); await tick();
   results.tilePicks = !!c2('.grid') && c2('.tile.sel')?.dataset.val === '0' && c2('.strip .thumb[aria-selected="true"]').dataset.val === '0';
-  states['input_select.l2'] = { state: '1' };
+  card2.setConfig({ layout_entity: 'input_select.l2', overlay: { thumbs: 'single' },
+    cameras: [{ stream: 'q0' }, { stream: 'q1' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  results.gridNoThumbs = !!c2('.grid') && !c2('.strip');
+  states['input_select.l2'] = { state: '1' }; card2.hass = { ...hass, states: { ...states } }; await tick();
+  results.singleKeepsThumbs = root2.querySelectorAll('.strip .thumb').length === 2;
 
   // Screenshots
   const shot = q.get('shot');
