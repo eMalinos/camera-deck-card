@@ -211,6 +211,9 @@
   results.gridPick = !!c2('.grid') && c2('.tile.sel')?.dataset.val === '2' && c2('.tools [data-act="fs-cam"]').dataset.val === '2';
   c2('.tools [data-act="sound"]').click(); await tick();
   results.gridPickSound = !c2('.slot[data-stream="q2"] webrtc-camera').video.muted;
+  c2('.pager [data-act="page"][data-val="-1"]').click(); await tick(); // back to the page with cameras 0 and 1
+  c2('.tile[data-val="0"]').click(); await tick();
+  results.tilePicks = !!c2('.grid') && c2('.tile.sel')?.dataset.val === '0' && c2('.strip .thumb[aria-selected="true"]').dataset.val === '0';
   states['input_select.l2'] = { state: '1' };
 
   // Screenshots

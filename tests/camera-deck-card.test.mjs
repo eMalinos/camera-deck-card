@@ -141,11 +141,11 @@ test('viewModel grid pages are clamped and use 2 columns semantics', () => {
   assert.equal(viewModel(cfg(2), hass({}), { layout: '2', cam: 0, page: 0 }).pager.label, ''); // one page: no label
 });
 
-test('viewModel forceSingle overrides the shared layout entity', () => {
+test('viewModel follows the shared layout entity', () => {
   const c = normalizeConfig({ layout_entity: 'input_select.l', cameras: [{ stream: 'a' }, { stream: 'b' }] });
   const h = hass({ 'input_select.l': '4' });
-  assert.equal(viewModel(c, h, { layout: '1', cam: 0, page: 0 }).isSingle, false);
-  assert.equal(viewModel(c, h, { layout: '1', cam: 1, page: 0, forceSingle: true }).cam.stream, 'b');
+  assert.equal(viewModel(c, h, { layout: '1', cam: 1, page: 0 }).isSingle, false);
+  assert.equal(viewModel(c, h, { layout: '1', cam: 1, page: 0 }).cam.stream, 'b');
 });
 
 test('player video ignores taps (no native controls over the overlays)', () => {
