@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -31,10 +31,14 @@ export const OVERLAY_ALLOWED = {
   ptz: [...PICTURE, ...BELOW, 'hidden'],
   sound: ['heading', ...PICTURE, ...BELOW, 'hidden'],
   privacy: ['heading', ...PICTURE, ...BELOW, 'hidden'],
+  // The whole card full screen: in the heading, or in a row under the card.
+  card_fullscreen: ['heading', 'footer-left', 'footer-right', 'hidden'],
 };
+// `overlay.order`: the order of controls that share a position; the ones it leaves out follow in this order.
+export const OVERLAY_ORDER = ['live', 'name', 'mode', 'sound', 'privacy', 'ptz', 'fullscreen', 'card_fullscreen'];
 const isBelow = (v) => BELOW.includes(v);
 const belowSide = (key, v) => (v === 'below' ? (key === 'sound' || key === 'privacy' ? 'left' : 'right') : v.slice(6));
-export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading' };
+export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading', card_fullscreen: 'heading', order: OVERLAY_ORDER };
 
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), a small pill; the card draws its own overlays.
 // `contain` keeps the camera's own overlays (time) in view.
@@ -47,6 +51,14 @@ function normalizeOverlay(ov) {
   if (ov != null && (typeof ov !== 'object' || Array.isArray(ov))) throw new Error('camera-deck-card: overlay must be an object');
   const out = { ...OVERLAY_DEFAULTS };
   for (const [k, v] of Object.entries(ov || {})) {
+    if (k === 'order') {
+      if (v == null) continue;
+      if (!Array.isArray(v) || v.some((c) => !OVERLAY_ORDER.includes(c)) || new Set(v).size !== v.length) {
+        throw new Error(`camera-deck-card: overlay.order must be a list of distinct controls from ${OVERLAY_ORDER.join(', ')}`);
+      }
+      out.order = [...v, ...OVERLAY_ORDER.filter((c) => !v.includes(c))];
+      continue;
+    }
     if (!Object.hasOwn(OVERLAY_ALLOWED, k)) throw new Error(`camera-deck-card: unknown overlay key ${k}`);
     if (v == null) continue;
     if (!OVERLAY_ALLOWED[k].includes(v)) throw new Error(`camera-deck-card: overlay.${k} must be one of ${OVERLAY_ALLOWED[k].join(', ')}`);
@@ -488,7 +500,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     const scroll = this.shadowRoot.querySelector('.strip')?.scrollLeft || 0;
     const wasSingle = this._wasSingle;
     this._wasSingle = vm.isSingle;
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card${vm.fs ? ' fs' : ''}">${vm.fs === 'cam' ? '' : this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}</div>`;
+    this.shadowRoot.innerHTML = `<style>${STYLE}</style><div class="card${vm.fs ? ' fs' : ''}">${vm.fs === 'cam' ? '' : this._head(vm)}${vm.isSingle ? this._single(vm) : this._grid(vm)}${vm.fs === 'cam' ? '' : this._foot(vm)}</div>`;
     this._mountPlayers(vm);
     this._placeMode();
     if (!vm.isSingle) return;
@@ -550,24 +562,36 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _head(vm) {
     const btns = ['1', '2', '4'].map((id) =>
       `<button role="radio" aria-checked="${vm.layout === id}" aria-label="${LAYOUT_LABELS[id]}" data-act="layout" data-val="${id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${ICON_PATHS[id]}</svg></button>`).join('');
-    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span>${this._acts(vm, 'hact')}${vm.cams.length > 1 ? `<div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div>` : ''}<button class="hbtn" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button></div>`;
+    return `<div class="head"><h2>${esc(vm.title)}</h2><span class="page-label">${vm.pager.label}</span>${this._acts(vm, 'hact')}${vm.cams.length > 1 ? `<div class="switch" role="radiogroup" aria-label="Camera layout">${btns}</div>` : ''}${this._cfg.overlay.card_fullscreen === 'heading' ? this._cardFsBtn(vm, 'hbtn') : ''}</div>`;
   }
 
-  // The picture controls of one camera in their zones. Items are in the table's order;
+  _cardFsBtn(vm, cls) {
+    return `<button class="${cls}" aria-label="${vm.fs ? 'Exit full screen' : 'Full screen'}" data-act="fs">${TOOL_ICON(vm.fs ? FS_EXIT : FS)}</button>`;
+  }
+
+  // A row under the card for the card's full screen button (`footer-left` / `footer-right`).
+  _foot(vm) {
+    const pos = this._cfg.overlay.card_fullscreen;
+    if (!pos.startsWith('footer-')) return '';
+    const b = this._cardFsBtn(vm, '');
+    return `<div class="tools foot">${pos === 'footer-left' ? b : ''}<span class="sp"></span>${pos === 'footer-right' ? b : ''}</div>`;
+  }
+
+  // The picture controls of one camera in their zones, in `overlay.order`;
   // `tail` (position pill / sound indicator) follows the name, or sits top right when the name is hidden.
   _zones(c, vm, tail) {
     const o = this._cfg.overlay;
     const single = vm.isSingle;
     const items = [
-      { pos: o.live, html: `<span class="badge bdg${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span>` },
-      { pos: o.name, html: `<span class="pill bdg">${esc(c.name)}</span>` },
-      { pos: o.name === 'hidden' ? 'top-right' : o.name, html: tail },
-      { pos: o.mode, html: c.online && !this._missingPlayer ? '<span class="zph"></span>' : '' },
-      { pos: o.sound, html: c.online ? this._sndBtn(c, 'zb', single ? 'sound' : 'sound-cam') : '' },
-      { pos: o.privacy, html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
-      { pos: o.ptz, html: single && c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
-      { pos: o.fullscreen, html: this._fsBtn(c.index, single && vm.fs === 'cam', 'fsb') },
-    ];
+      { key: 'live', pos: o.live, html: `<span class="badge bdg${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span>` },
+      { key: 'name', pos: o.name, html: `<span class="pill bdg">${esc(c.name)}</span>` },
+      { key: 'name', pos: o.name === 'hidden' ? 'top-right' : o.name, html: tail },
+      { key: 'mode', pos: o.mode, html: c.online && !this._missingPlayer ? '<span class="zph"></span>' : '' },
+      { key: 'sound', pos: o.sound, html: c.online ? this._sndBtn(c, 'zb', single ? 'sound' : 'sound-cam') : '' },
+      { key: 'privacy', pos: o.privacy, html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
+      { key: 'ptz', pos: o.ptz, html: single && c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
+      { key: 'fullscreen', pos: o.fullscreen, html: this._fsBtn(c.index, single && vm.fs === 'cam', 'fsb') },
+    ].sort((a, b) => o.order.indexOf(a.key) - o.order.indexOf(b.key)); // stable: the tail stays after the name
     return PICTURE.map((p) => {
       const html = items.filter((i) => i.pos === p).map((i) => i.html).join('');
       return html ? `<span class="z z-${p}">${html}</span>` : '';
@@ -630,7 +654,8 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     }
     const c = vm.cam;
     if (!c.online) return '';
-    return (o.sound === 'heading' ? this._sndBtn(c, cls, 'sound') : '') + (o.privacy === 'heading' && c.privacy ? this._privBtn(c, cls) : '');
+    const btn = { sound: () => this._sndBtn(c, cls, 'sound'), privacy: () => (c.privacy ? this._privBtn(c, cls) : '') };
+    return o.order.filter((k) => btn[k] && o[k] === 'heading').map((k) => btn[k]()).join('');
   }
 
   // Under the camera: `below*` controls on their side, and `acts` (the heading's, when it is hidden) first on the left.
@@ -644,7 +669,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       ptz: () => (live ? this._ptzBtns(c, '') : ''),
       fullscreen: () => this._fsBtn(c.index, vm.fs === 'cam', ''),
     };
-    const side = (s) => Object.keys(btn).filter((k) => isBelow(o[k]) && belowSide(k, o[k]) === s).map((k) => btn[k]()).join('');
+    const side = (s) => o.order.filter((k) => btn[k] && isBelow(o[k]) && belowSide(k, o[k]) === s).map((k) => btn[k]()).join('');
     const left = acts + side('left');
     const right = side('right');
     return left || right ? `<div class="tools">${left}<span class="sp"></span>${right}</div>` : '';
