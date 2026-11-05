@@ -169,18 +169,16 @@ test('card badges hide on a narrow card wherever they are placed', () => {
   assert.match(STYLE, /@container \(max-width:500px\)\{\.grid \.bdg\{display:none\}\}/);
 });
 
-test('viewModel gives grid cameras privacy on the picture or under the tile, PTZ under the tile', () => {
-  const h = { states: {}, entities: { 'camera.a': { entity_id: 'camera.a', device_id: 'd' }, 'switch.a_privacy': { entity_id: 'switch.a_privacy', device_id: 'd' } } };
+test('viewModel: grid tiles get privacy only on the picture; the selected camera has its controls in a grid too', () => {
+  const h = { states: {}, entities: { 'camera.a': { entity_id: 'camera.a', device_id: 'd' }, 'switch.a_privacy': { entity_id: 'switch.a_privacy', device_id: 'd' }, 'button.a_move_up': { entity_id: 'button.a_move_up', device_id: 'd' } } };
   const mk = (privacy) => normalizeConfig({ overlay: privacy && { privacy }, cameras: [{ stream: 'a', entity: 'camera.a' }, { stream: 'b' }] });
   const st = { layout: '2', cam: 0, page: 0 };
   assert.deepEqual(viewModel(mk(), h, st).grid.map((g) => g.privacy), [null, null]);
-  assert.deepEqual(viewModel(mk('hidden'), h, st).grid.map((g) => g.privacy), [null, null]);
-  for (const at of ['below', 'below-right', 'top-left']) assert.deepEqual(viewModel(mk(at), h, st).grid.map((g) => g.privacy), [{ entity: 'switch.a_privacy', on: false }, null]);
-  // PTZ (default `below`) from the device's move buttons; none on the picture
-  const hp = { states: {}, entities: { ...h.entities, 'button.a_move_up': { entity_id: 'button.a_move_up', device_id: 'd' } } };
-  assert.deepEqual(viewModel(mk(), hp, st).grid.map((g) => g.ptz.length), [1, 0]);
-  const onPic = normalizeConfig({ overlay: { ptz: 'center' }, cameras: [{ stream: 'a', entity: 'camera.a' }, { stream: 'b' }] });
-  assert.deepEqual(viewModel(onPic, hp, st).grid.map((g) => g.ptz.length), [0, 0]);
+  assert.deepEqual(viewModel(mk('below'), h, st).grid.map((g) => g.privacy), [null, null]);
+  assert.deepEqual(viewModel(mk('top-left'), h, st).grid.map((g) => g.privacy), [{ entity: 'switch.a_privacy', on: false }, null]);
+  const vm = viewModel(mk(), h, st);
+  assert.equal(vm.cam.ptz.length, 1);
+  assert.deepEqual(vm.grid.map((g) => g.selected), [true, false]);
 });
 
 test('viewModel waiting: sound wanted but blocked by the browser', () => {
