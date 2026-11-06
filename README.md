@@ -81,14 +81,14 @@ overlay:               # optional, where the controls sit (the same for every ca
 | `name` | camera name | `top-right` | picture position, `hidden` |
 | `mode` | playback mode label (`RTC` / `MSE` / `HLS`) | `bottom-left` | picture position, `hidden` |
 | `fullscreen` | full screen button of a camera | `bottom-right` | picture position, `below`, `below-left`, `below-right`, `hidden` |
-| `ptz` | PTZ buttons (on the picture they form a small d-pad, single camera only; under the camera also under a grid, for the picked camera) | `below` | picture position, `below`, `below-left`, `below-right`, `hidden` |
+| `ptz` | PTZ buttons (on the picture they form a small d-pad; in a grid a d-pad in the middle of each tile, hidden on a card narrower than 500 px) | `below` | picture position, `below`, `below-left`, `below-right`, `hidden` |
 | `sound` | sound button | `heading` | `heading`, picture position, `below`, `below-left`, `below-right`, `hidden` |
-| `privacy` | privacy switch (on grid tiles at a picture position; under the grid for the picked camera; not in a grid heading) | `heading` | `heading`, picture position, `below`, `below-left`, `below-right`, `hidden` |
+| `privacy` | privacy switch (in a grid always on each tile) | `heading` | `heading`, picture position, `below`, `below-left`, `below-right`, `hidden` |
 | `card_fullscreen` | full screen button of the whole card | `heading` | `heading`, `footer-left`, `footer-right` (a row under the card), `hidden` |
 | `thumbs` | thumbnail strip | `always` | `always`, `single` (only under a single camera; in a grid tap a tile to pick) |
 | `order` | order of controls that share a position, e.g. `[fullscreen, sound]` | live, name, mode, sound, privacy, ptz, fullscreen, card_fullscreen | a list of distinct keys above; the ones left out follow in the default order |
 
-Picture positions: `top-left`, `top-center`, `top-right`, `middle-left`, `center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right`. `below-left` / `below-right` put the control in the toolbar under the camera, on that side; a grid has the same toolbar under it, for the camera picked in the thumbnails below (outlined); plain `below` keeps the control's own side (sound and privacy left, PTZ and full screen right). In a grid, a sound button in the heading is one button for the page. At a picture position sound and privacy get a button on the camera, on every tile in a grid. Controls in one position sit in one row in `order`. A wrong key or value makes the card show a configuration error.
+Picture positions: `top-left`, `top-center`, `top-right`, `middle-left`, `center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right`. `below-left` / `below-right` put the control in the toolbar under the camera, on that side; plain `below` keeps the control's own side (sound and privacy left, PTZ and full screen right). In a grid every camera's own controls (privacy, PTZ, full screen) sit on its tile: `heading` and `below*` become the tile's bottom corner on their side, PTZ the tile's centre. Sound in a grid is one button for all cameras on the page: in the heading (also for a picture position), or under the grid for `below*`. Controls in one position sit in one row in `order`. A wrong key or value makes the card show a configuration error.
 
 There is no visual editor yet.
 
