@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -41,10 +41,10 @@ export const OVERLAY_ORDER = ['live', 'name', 'mode', 'sound', 'privacy', 'ptz',
 const isBelow = (v) => BELOW.includes(v);
 const belowSide = (key, v) => (v === 'below' ? (key === 'sound' || key === 'privacy' ? 'left' : 'right') : v.slice(6));
 // In a grid a camera's own controls sit on its tile: `heading` and `below*` become the tile's bottom
-// corner on their side, PTZ the tile's centre. Sound is one button for the page there, outside the tiles.
+// corner on their side (PTZ as a row of buttons, as under a single camera). Sound is one button for the page
+// there, outside the tiles.
 export function tilePos(key, v) {
   if (v === 'hidden' || PICTURE.includes(v)) return v;
-  if (key === 'ptz') return 'center';
   return v === 'below-left' || (v !== 'below-right' && (key === 'sound' || key === 'privacy')) ? 'bottom-left' : 'bottom-right';
 }
 export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading', card_fullscreen: 'heading', thumbs: 'always', order: OVERLAY_ORDER };
@@ -239,7 +239,7 @@ button{font-family:inherit;cursor:pointer}
 .z-top-left,.z-middle-left{left:var(--s)}
 .z-top-right,.z-middle-right{right:var(--s)}
 .multi .z-middle-left{left:64px}.multi .z-middle-right{right:64px}
-@container (max-width:500px){.grid .bdg,.grid .dpad{display:none}}
+@container (max-width:500px){.grid .bdg,.grid .dpad,.grid .ptzg{display:none}}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
 .badge.off{background:#616161}
 .pill{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px;font-weight:500}
@@ -289,6 +289,7 @@ button{font-family:inherit;cursor:pointer}
 .zb[aria-pressed="true"]{background:var(--primary-color,#0277bd)}
 .cell .fsb,.cell .zb{width:32px;height:32px}
 .cell .dpad .zb{width:24px;height:24px}
+.cell .ptzg .zb{width:28px;height:28px}
 .dpad{display:grid;grid-template-columns:repeat(3,auto);gap:2px}
 .dpad .up{grid-area:1/2}.dpad .left{grid-area:2/1}.dpad .right{grid-area:2/3}.dpad .down{grid-area:3/2}
 .hbtn,.hact{width:42px;height:42px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
@@ -592,7 +593,7 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
       { key: 'mode', pos: o.mode, html: c.online && !this._missingPlayer ? '<span class="zph"></span>' : '' },
       { key: 'sound', pos: o.sound, html: single && c.online ? this._sndBtn(c, 'zb', 'sound') : '' },
       { key: 'privacy', pos: at('privacy'), html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
-      { key: 'ptz', pos: at('ptz'), html: c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
+      { key: 'ptz', pos: at('ptz'), html: c.online && c.ptz.length ? `<span class="${single || PICTURE.includes(o.ptz) ? 'dpad' : 'ptzg'}">${this._ptzBtns(c, 'zb')}</span>` : '' },
       { key: 'fullscreen', pos: at('fullscreen'), html: this._fsBtn(c.index, single && vm.fs === 'cam', 'fsb') },
     ].sort((a, b) => o.order.indexOf(a.key) - o.order.indexOf(b.key)); // stable: the tail stays after the name
     return PICTURE.map((p) => {

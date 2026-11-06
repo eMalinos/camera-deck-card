@@ -205,7 +205,9 @@
   // Grid: below* controls sit on the tiles; under the grid only the page's sound
   states['input_select.l2'] = { state: '2' };
   card2.setConfig({ layout_entity: 'input_select.l2', overlay: { sound: 'below', fullscreen: 'below-right' },
-    cameras: [{ stream: 'q0' }, { stream: 'q1' }, { stream: 'q2' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+    cameras: [{ stream: 'q0', ptz }, { stream: 'q1' }, { stream: 'q2' }] }); card2.hass = { ...hass, states: { ...states } }; await tick();
+  const br = [...c2('.cell .z-bottom-right').children]; // PTZ in a row, then full screen
+  results.gridPtzRow = br.length === 2 && br[0].matches('.ptzg') && br[0].children.length === 4 && br[1].matches('[data-act="fs-cam"]');
   results.gridStrip = root2.querySelectorAll('.strip .thumb').length === 3 && root2.querySelectorAll('.tools').length === 1
     && !!c2('.tools .tl [data-act="grid-sound"]') && !c2('.tools [data-act="fs-cam"]') && !c2('.head [data-act="grid-sound"]')
     && root2.querySelectorAll('.cell .z-bottom-right [data-act="fs-cam"]').length === 2;

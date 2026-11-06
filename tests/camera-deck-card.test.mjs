@@ -166,7 +166,7 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
 
 test('card badges hide on a narrow card wherever they are placed', () => {
   assert.match(STYLE, /\.z-top-right,\.z-middle-right\{right:var\(--s\)\}/);
-  assert.match(STYLE, /@container \(max-width:500px\)\{\.grid \.bdg,\.grid \.dpad\{display:none\}\}/);
+  assert.match(STYLE, /@container \(max-width:500px\)\{\.grid \.bdg,\.grid \.dpad,\.grid \.ptzg\{display:none\}\}/);
 });
 
 test('viewModel: grid tiles carry their own PTZ and privacy', () => {
@@ -180,7 +180,8 @@ test('viewModel: grid tiles carry their own PTZ and privacy', () => {
 test('tilePos: heading and below* become the tile corner on their side', () => {
   assert.equal(tilePos('privacy', 'heading'), 'bottom-left');
   assert.equal(tilePos('privacy', 'below'), 'bottom-left');
-  assert.equal(tilePos('ptz', 'below-left'), 'center');
+  assert.equal(tilePos('ptz', 'below'), 'bottom-right');
+  assert.equal(tilePos('ptz', 'below-left'), 'bottom-left');
   assert.equal(tilePos('fullscreen', 'below-left'), 'bottom-left');
   assert.equal(tilePos('privacy', 'below-right'), 'bottom-right');
   assert.equal(tilePos('fullscreen', 'top-left'), 'top-left');
