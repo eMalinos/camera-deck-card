@@ -10,7 +10,7 @@
  * https://github.com/eMalinos/camera-deck-card
  */
 
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 
 const LAYOUTS = ['1', '2', '4'];
 const OFFLINE_STATES = ['unavailable', 'unknown'];
@@ -40,6 +40,13 @@ export const OVERLAY_ALLOWED = {
 export const OVERLAY_ORDER = ['live', 'name', 'mode', 'sound', 'privacy', 'ptz', 'fullscreen', 'card_fullscreen'];
 const isBelow = (v) => BELOW.includes(v);
 const belowSide = (key, v) => (v === 'below' ? (key === 'sound' || key === 'privacy' ? 'left' : 'right') : v.slice(6));
+// In a grid a camera's own controls sit on its tile: `heading` and `below*` become the tile's bottom
+// corner on their side, PTZ the tile's centre. Sound is one button for the page there, outside the tiles.
+export function tilePos(key, v) {
+  if (v === 'hidden' || PICTURE.includes(v)) return v;
+  if (key === 'ptz') return 'center';
+  return v === 'below-left' || (v !== 'below-right' && (key === 'sound' || key === 'privacy')) ? 'bottom-left' : 'bottom-right';
+}
 export const OVERLAY_DEFAULTS = { live: 'top-right', name: 'top-right', mode: 'bottom-left', fullscreen: 'bottom-right', ptz: 'below', sound: 'heading', privacy: 'heading', card_fullscreen: 'heading', thumbs: 'always', order: OVERLAY_ORDER };
 
 // Keeps only webrtc-camera's mode label (RTC / MSE / HLS), a small pill; the card draws its own overlays.
@@ -153,9 +160,7 @@ export function viewModel(cfg, hass, state) {
     waiting: !!state.sound?.[c.stream] && !!state.blocked?.[c.stream],
   }));
   const pg = pageOf(n, isSingle ? 1 : Number(layout), state.page);
-  // Grid tiles get the privacy switch only on the picture; the toolbar under the grid is the selected camera's.
-  const tilePrivacy = PICTURE.includes(cfg.overlay.privacy);
-  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map((c) => ({ ...c, privacy: tilePrivacy ? controlsOf(hass, cfg.cameras[c.index]).privacy : null }));
+  const grid = isSingle ? [] : cams.slice(pg.start, pg.end).map((c) => ({ ...c, ...controlsOf(hass, cfg.cameras[c.index]) }));
   return {
     title: cfg.title,
     layout,
@@ -234,7 +239,7 @@ button{font-family:inherit;cursor:pointer}
 .z-top-left,.z-middle-left{left:var(--s)}
 .z-top-right,.z-middle-right{right:var(--s)}
 .multi .z-middle-left{left:64px}.multi .z-middle-right{right:64px}
-@container (max-width:500px){.grid .bdg{display:none}}
+@container (max-width:500px){.grid .bdg,.grid .dpad{display:none}}
 .badge{border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;color:#ffffff;background:#d32f2f}
 .badge.off{background:#616161}
 .pill{background:rgba(0,0,0,.55);color:#ffffff;border-radius:10px;padding:4px 10px;font-size:12px;font-weight:500}
@@ -283,6 +288,7 @@ button{font-family:inherit;cursor:pointer}
 .fsb,.zb{width:36px;height:36px;border:0;border-radius:10px;background:rgba(0,0,0,.55);color:#ffffff;display:flex;align-items:center;justify-content:center}
 .zb[aria-pressed="true"]{background:var(--primary-color,#0277bd)}
 .cell .fsb,.cell .zb{width:32px;height:32px}
+.cell .dpad .zb{width:24px;height:24px}
 .dpad{display:grid;grid-template-columns:repeat(3,auto);gap:2px}
 .dpad .up{grid-area:1/2}.dpad .left{grid-area:2/1}.dpad .right{grid-area:2/3}.dpad .down{grid-area:3/2}
 .hbtn,.hact{width:42px;height:42px;border:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--secondary-background-color,#f0f0f0);color:var(--primary-text-color,#212121)}
@@ -411,12 +417,6 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
         if (vm.cam.waiting) this._unlockSound();
         else this._set({ sound: { ...this._state.sound, [vm.cam.stream]: !vm.cam.sound }, blocked: {} });
         break;
-      case 'sound-cam': {
-        const c = vm.cams[Number(v)];
-        if (c.waiting) this._unlockSound();
-        else this._set({ sound: { ...this._state.sound, [c.stream]: !c.sound }, blocked: {} });
-        break;
-      }
       case 'grid-sound':
         if (vm.gridWaiting) this._unlockSound();
         else this._set({ sound: { ...this._state.sound, ...Object.fromEntries(vm.grid.map((c) => [c.stream, !vm.gridSound])) }, blocked: {} });
@@ -584,15 +584,16 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _zones(c, vm, tail) {
     const o = this._cfg.overlay;
     const single = vm.isSingle;
+    const at = (k) => (single ? o[k] : tilePos(k, o[k]));
     const items = [
       { key: 'live', pos: o.live, html: `<span class="badge bdg${c.online ? '' : ' off'}">${c.online ? '● LIVE' : 'OFFLINE'}</span>` },
       { key: 'name', pos: o.name, html: `<span class="pill bdg">${esc(c.name)}</span>` },
       { key: 'name', pos: o.name === 'hidden' ? 'top-right' : o.name, html: tail },
       { key: 'mode', pos: o.mode, html: c.online && !this._missingPlayer ? '<span class="zph"></span>' : '' },
-      { key: 'sound', pos: o.sound, html: c.online ? this._sndBtn(c, 'zb', single ? 'sound' : 'sound-cam') : '' },
-      { key: 'privacy', pos: o.privacy, html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
-      { key: 'ptz', pos: o.ptz, html: single && c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
-      { key: 'fullscreen', pos: o.fullscreen, html: this._fsBtn(c.index, single && vm.fs === 'cam', 'fsb') },
+      { key: 'sound', pos: o.sound, html: single && c.online ? this._sndBtn(c, 'zb', 'sound') : '' },
+      { key: 'privacy', pos: at('privacy'), html: c.online && c.privacy ? this._privBtn(c, 'zb') : '' },
+      { key: 'ptz', pos: at('ptz'), html: c.online && c.ptz.length ? `<span class="dpad">${this._ptzBtns(c, 'zb')}</span>` : '' },
+      { key: 'fullscreen', pos: at('fullscreen'), html: this._fsBtn(c.index, single && vm.fs === 'cam', 'fsb') },
     ].sort((a, b) => o.order.indexOf(a.key) - o.order.indexOf(b.key)); // stable: the tail stays after the name
     return PICTURE.map((p) => {
       const html = items.filter((i) => i.pos === p).map((i) => i.html).join('');
@@ -651,22 +652,31 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
     return `<div class="strip" role="tablist" aria-label="Cameras">${thumbs}</div>`;
   }
 
-  // Sound (and privacy in layout 1) for the heading, above the cameras. In a grid a heading sound
-  // is one button for the page; a picture position or `below*` puts a button on every tile.
+  // Sound (and privacy in layout 1) for the heading, above the cameras. In a grid sound is one button
+  // for the page: in the heading, or under the grid for `below*`.
   _acts(vm, cls) {
     const o = this._cfg.overlay;
-    if (!vm.isSingle) {
-      return o.sound === 'heading'
-        ? `<button class="${cls}" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`
-        : '';
-    }
+    if (!vm.isSingle) return o.sound === 'hidden' || isBelow(o.sound) ? '' : this._gridSndBtn(vm, cls);
     const c = vm.cam;
     if (!c.online) return '';
     const btn = { sound: () => this._sndBtn(c, cls, 'sound'), privacy: () => (c.privacy ? this._privBtn(c, cls) : '') };
     return o.order.filter((k) => btn[k] && o[k] === 'heading').map((k) => btn[k]()).join('');
   }
 
-  // Under the camera (the single view) or the grid (the selected camera's): `below*` controls on their side,
+  _gridSndBtn(vm, cls) {
+    return `<button class="${cls}" aria-pressed="${vm.gridSound}" aria-label="${vm.gridWaiting ? 'Tap to turn sound on' : vm.gridSound ? 'Mute all' : 'Unmute all'}" data-act="grid-sound">${this._soundIcon({ sound: vm.gridSound, waiting: vm.gridWaiting })}</button>`;
+  }
+
+  // Under the grid: only the page's sound button (`below*`); the cameras' controls are on their tiles.
+  _gridTools(vm) {
+    const o = this._cfg.overlay;
+    if (!isBelow(o.sound)) return '';
+    const b = this._gridSndBtn(vm, '');
+    const left = belowSide('sound', o.sound) === 'left';
+    return `<div class="tools"><span class="tl">${left ? b : ''}</span><span class="tr">${left ? '' : b}</span></div>`;
+  }
+
+  // Under the camera (the single view): `below*` controls on their side,
   // and `acts` (the heading's, when it is hidden) first on the left.
   _tools(c, vm, acts) {
     const o = this._cfg.overlay;
@@ -687,12 +697,12 @@ class CameraDeckCard extends (globalThis.HTMLElement ?? class {}) {
   _grid(vm) {
     // The picture controls sit next to the tile: a button can't hold another button.
     const tiles = vm.grid.map((c) => {
-      const snd = c.online && c.sound && !PICTURE.includes(this._cfg.overlay.sound) ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
+      const snd = c.online && c.sound ? `<span class="pill snd" aria-label="${c.waiting ? 'Sound waits for a tap' : 'Sound on'}">${this._soundIcon(c)}</span>` : '';
       return `<div class="cell"><div class="pic"><button class="tile${c.online ? '' : ' off'}${c.selected ? ' sel' : ''}" aria-label="Pick ${esc(c.name)}" aria-pressed="${c.selected}" data-act="pick" data-val="${c.index}">${this._video(c, 32)}</button>${this._zones(c, vm, snd)}</div></div>`;
     }).join('');
     const dots = vm.pager.dots.map((on) => `<span class="${on ? 'on' : ''}"></span>`).join('');
     return `<div class="grid n${vm.grid.length}">${tiles}</div>${vm.pager.pages > 1 ? `<div class="pager"><button aria-label="Previous page" data-act="page" data-val="-1">${CHEVRON('prev', 18)}</button><div class="pdots">${dots}</div><button aria-label="Next page" data-act="page" data-val="1">${CHEVRON('next', 18)}</button></div>` : ''}`
-      + this._tools(vm.cam, vm, '') + (this._cfg.overlay.thumbs === 'always' ? this._strip(vm) : '');
+      + this._gridTools(vm) + (this._cfg.overlay.thumbs === 'always' ? this._strip(vm) : '');
   }
 
   async _mountPlayers(vm) {

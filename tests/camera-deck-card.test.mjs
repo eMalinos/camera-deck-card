@@ -1,7 +1,7 @@
 // Run: node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, PLAYER_STYLE, STYLE, OVERLAY_DEFAULTS, OVERLAY_ALLOWED, OVERLAY_ORDER } from '../dist/camera-deck-card.js';
+import { normalizeConfig, layoutOf, isOnline, wrap, pageOf, posterPath, playerConfig, viewModel, controlsOf, tilePos, PLAYER_STYLE, STYLE, OVERLAY_DEFAULTS, OVERLAY_ALLOWED, OVERLAY_ORDER } from '../dist/camera-deck-card.js';
 
 const hass = (states) => ({ states: Object.fromEntries(Object.entries(states).map(([k, v]) => [k, { state: v }])) });
 const cfg = (n) => normalizeConfig({ cameras: Array.from({ length: n }, (_, i) => ({ stream: `s${i}`, name: `Cam ${i}` })) });
@@ -166,19 +166,25 @@ test('card colours follow the theme: hex colours only as var() fallbacks, except
 
 test('card badges hide on a narrow card wherever they are placed', () => {
   assert.match(STYLE, /\.z-top-right,\.z-middle-right\{right:var\(--s\)\}/);
-  assert.match(STYLE, /@container \(max-width:500px\)\{\.grid \.bdg\{display:none\}\}/);
+  assert.match(STYLE, /@container \(max-width:500px\)\{\.grid \.bdg,\.grid \.dpad\{display:none\}\}/);
 });
 
-test('viewModel: grid tiles get privacy only on the picture; the selected camera has its controls in a grid too', () => {
+test('viewModel: grid tiles carry their own PTZ and privacy', () => {
   const h = { states: {}, entities: { 'camera.a': { entity_id: 'camera.a', device_id: 'd' }, 'switch.a_privacy': { entity_id: 'switch.a_privacy', device_id: 'd' }, 'button.a_move_up': { entity_id: 'button.a_move_up', device_id: 'd' } } };
-  const mk = (privacy) => normalizeConfig({ overlay: privacy && { privacy }, cameras: [{ stream: 'a', entity: 'camera.a' }, { stream: 'b' }] });
-  const st = { layout: '2', cam: 0, page: 0 };
-  assert.deepEqual(viewModel(mk(), h, st).grid.map((g) => g.privacy), [null, null]);
-  assert.deepEqual(viewModel(mk('below'), h, st).grid.map((g) => g.privacy), [null, null]);
-  assert.deepEqual(viewModel(mk('top-left'), h, st).grid.map((g) => g.privacy), [{ entity: 'switch.a_privacy', on: false }, null]);
-  const vm = viewModel(mk(), h, st);
-  assert.equal(vm.cam.ptz.length, 1);
-  assert.deepEqual(vm.grid.map((g) => g.selected), [true, false]);
+  const c = normalizeConfig({ cameras: [{ stream: 'a', entity: 'camera.a' }, { stream: 'b' }] });
+  const vm = viewModel(c, h, { layout: '2', cam: 0, page: 0 });
+  assert.deepEqual(vm.grid.map((g) => g.privacy), [{ entity: 'switch.a_privacy', on: false }, null]);
+  assert.deepEqual(vm.grid.map((g) => g.ptz.length), [1, 0]);
+});
+
+test('tilePos: heading and below* become the tile corner on their side', () => {
+  assert.equal(tilePos('privacy', 'heading'), 'bottom-left');
+  assert.equal(tilePos('privacy', 'below'), 'bottom-left');
+  assert.equal(tilePos('ptz', 'below-left'), 'center');
+  assert.equal(tilePos('fullscreen', 'below-left'), 'bottom-left');
+  assert.equal(tilePos('privacy', 'below-right'), 'bottom-right');
+  assert.equal(tilePos('fullscreen', 'top-left'), 'top-left');
+  assert.equal(tilePos('ptz', 'hidden'), 'hidden');
 });
 
 test('viewModel waiting: sound wanted but blocked by the browser', () => {
